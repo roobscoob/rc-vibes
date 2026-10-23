@@ -446,6 +446,7 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, s
             }
             const m = asked.data;
             if (m.type === "clock") {
+              if (m.playing === undefined && m.t === undefined) return;
               const clock = show?.set({ ...(m.playing !== undefined ? { playing: m.playing } : {}), ...(m.t !== undefined ? { t: m.t } : {}) });
               // In the history: started, stopped, and moved (a run of moves from one person as one entry).
               if (clock && user) db.logCoalesced({ user, action: "show.clock", detail: { playing: clock.playing, t: Math.round(clock.t * 10) / 10 } }, ROOMTONE_LOG_WINDOW_MS, (last) => last?.playing === clock.playing);

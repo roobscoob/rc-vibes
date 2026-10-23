@@ -52,7 +52,8 @@ export type FromSketch =
   | { type: "error"; seq?: number; message: string };
 
 const reply = (m: FromSketch) => scope.postMessage(m);
-const tellParams = () => reply({ type: "params", specs: declared(), clock: host()?.show() ?? false });
+// An older library (one with params but no show clock) can't say whether the sketch reads it.
+const tellParams = () => reply({ type: "params", specs: declared(), clock: host()?.show?.() ?? false });
 
 const show = (v: unknown) => {
   if (typeof v === "string") return v;
