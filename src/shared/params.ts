@@ -13,6 +13,8 @@ import { passes, valuesOf, type ColorValue, type Groups, type LightFacts, type L
 export {
   checkSpec,
   cleanValue,
+  clockAt,
+  clockValue,
   colorValue,
   filterOf,
   groupsOf,
@@ -30,6 +32,7 @@ export {
   type ColorValue,
   type EndEvent,
   type Groups,
+  type HeardClock,
   type Hello,
   type LightFacts,
   type LightFilter,
@@ -39,9 +42,33 @@ export {
   type ParamSpec,
   type ParamTable,
   type ParamValue,
+  type ShowClock,
   type StateEvent,
   type ToggleSpec,
 } from "../../packages/vibes/src/wire.ts";
+
+/** A change to the show clock: started or stopped, and (or) moved to a time, in seconds. */
+export interface ClockPatch {
+  playing?: boolean;
+  t?: number;
+}
+
+/** A time on the show clock as the transport shows it: m:ss (h:mm:ss past an hour). */
+export function clockText(t: number): string {
+  const whole = Math.max(0, Math.floor(t));
+  const s = whole % 60;
+  const m = Math.floor(whole / 60) % 60;
+  const h = Math.floor(whole / 3600);
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  return `${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
+}
+
+/** A time typed into the transport, in seconds: m:ss, h:mm:ss, or just seconds; null if it isn't one. */
+export function parseClockText(text: string): number | null {
+  const parts = text.trim().split(":");
+  if (parts.length === 0 || parts.length > 3 || parts.some((p) => !/^\d+(\.\d+)?$/.test(p))) return null;
+  return parts.reduce((acc, p) => acc * 60 + Number(p), 0);
+}
 
 /** A shader's params, as the feed has them: what its sketch said it declares (null until it has), and its values. */
 export interface ShaderParams {

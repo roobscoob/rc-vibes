@@ -294,6 +294,25 @@ vibes learns what a sketch declares from the sketch itself, as it runs in the
 room, and streams it each value as it changes; nothing is needed in the
 sketch beyond the declaration.
 
+## The show clock
+
+One clock for the room, run from vibes (play, stop, and set to a time), so
+every sketch that follows it agrees where the piece is, and any part of it
+can be rehearsed. `show.time` is a field of where the piece is, in seconds;
+`show.playing`, whether it's running. A piece is then sections by time:
+
+```ts
+import { show, sketch } from "@roobscoob/vibes";
+
+const t = show.time;
+
+export const update = sketch((here) => (t(here) < 40 ? intro(here) : t(here) < 95 ? verse(here) : chorus(here)));
+```
+
+Before vibes has said anything, it's 0 and stopped. It comes the way params'
+values do, and runs on smoothly between words from vibes. The preview has the
+same clock, its own, with a transport over the map.
+
 ## Without sketch()
 
 `sketch()` makes arclamp's `update(prev, nowMs, initialMs)`, which you can

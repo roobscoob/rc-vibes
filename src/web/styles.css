@@ -3853,3 +3853,45 @@ html {
 .streetview-exposure input {
   width: 140px;
 }
+
+/* The transport (the show clock): play or stop, the time (click to set), back to the start. */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 34px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.transport-button,
+.transport-time {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.transport-button:hover,
+.transport-time:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.transport-time {
+  min-width: 44px;
+  text-align: center;
+}
+
+input.transport-time {
+  width: 56px;
+  background: rgb(255 255 255 / 0.1);
+  outline: none;
+}

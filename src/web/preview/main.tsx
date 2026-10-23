@@ -13,6 +13,7 @@ import { color } from "../../../packages/vibes/src/color.ts";
 import { appliesTo, valuesAt } from "../../shared/params.ts";
 import type { Lights } from "../../shared/vibes.ts";
 import { ParamControl, type ColorPickerProps } from "../components/ParamControl.tsx";
+import { Transport } from "../components/Transport.tsx";
 import { FramesProvider, type FrameSource } from "../live.ts";
 import { PreviewMap } from "./PreviewMap.tsx";
 import type { FromPreview, SketchSource, ToPreview } from "./protocol.ts";
@@ -97,7 +98,8 @@ function Preview() {
 /**
  * The sketch's params as knobs over the map, one each, setting every light
  * it's for: the preview's own values, not the room's, handed to the sketch as
- * vibes' stream hands them over in the room.
+ * vibes' stream hands them over in the room. With a transport for the show
+ * clock, if the sketch follows it: the preview's own, to rehearse any part.
  */
 function Knobs({ runner }: { runner: SketchRunner }) {
   useSyncExternalStore(runner.watch, () => runner.version);
@@ -105,10 +107,11 @@ function Knobs({ runner }: { runner: SketchRunner }) {
     const theirs = runner.lights.filter((l) => appliesTo(spec, l));
     return theirs.length > 0 ? [{ spec, theirs }] : [];
   });
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && !runner.usesClock) return null;
   return (
     // Its own pointer events: a drag that misses a track mustn't pan or select on the map under it.
     <div className="preview-knobs" onPointerDown={(e) => e.stopPropagation()}>
+      {runner.usesClock && <Transport clock={runner.clock} onSet={(patch) => runner.setClock(patch)} />}
       {rows.map(({ spec, theirs }) => (
         <ParamControl
           key={spec.name}

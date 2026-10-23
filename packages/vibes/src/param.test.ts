@@ -109,6 +109,28 @@ describe("param()", () => {
     expect(n({ light: { id: 1, kind: "color", tags: [] } } as never)).toBe(1);
   });
 
+  it("keeps the show clock, run on from when it was said while it plays, and says whether the script reads it", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    const { host } = await load();
+    const { show } = await import("./show.ts");
+    expect(host.show()).toBe(false);
+    const t = show.time;
+    const playing = show.playing;
+    expect(host.show()).toBe(true);
+    const here = (now: number) => ({ now } as never);
+    expect(t(here(10_000))).toBe(0);
+    expect(playing(here(10_000))).toBe(false);
+    expect(host.apply("clock", { t: 12.5, playing: true })).toBe(true);
+    expect(t(here(10_000))).toBe(12.5);
+    expect(t(here(12_000))).toBe(14.5);
+    expect(playing(here(12_000))).toBe(true);
+    vi.setSystemTime(12_000);
+    host.apply("clock", { t: 3, playing: false });
+    expect(t(here(15_000))).toBe(3);
+    expect(host.apply("clock", { t: -1, playing: true })).toBe(false);
+    expect(host.apply("clock", { t: 1 })).toBe(false);
+  });
+
   it("keeps the values, and not the declarations, through a new script", async () => {
     const first = await load();
     first.param("old", 1);

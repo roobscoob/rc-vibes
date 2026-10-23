@@ -23,6 +23,7 @@ import { instanceRoutes, type Instances } from "./instances.ts";
 import { applyEdits, lightsFile } from "./lights.ts";
 import type { SceneFeedSource } from "./scene-feed.ts";
 import { createShaders, Refused, shaderRoutes } from "./shaders.ts";
+import type { ShowClockSource } from "./show.ts";
 import type { StreamRelay } from "./stream.ts";
 import { streetviewPublicFiles, streetviewRoutes } from "./streetview.ts";
 
@@ -48,6 +49,8 @@ export interface ApiDeps {
   instances?: Instances | null;
   /** arclamp's health, followed (without it, it's asked for each time). */
   health?: HealthWatch | null;
+  /** The show clock, set from any browser and told to all (and to sketches, over their streams). */
+  show?: ShowClockSource | null;
 }
 
 // An event stream says something at least this often (a ping, if nothing
@@ -60,6 +63,9 @@ const SOCKETS = new Set(["/api/scene/ws", "/api/stream"]);
 // How long a socket without a cookie has to say who's there.
 const AUTH_WAIT_MS = 10_000;
 const authMessage = z.object({ type: z.literal("auth"), token: z.string().max(4096) });
+// The show clock set (at most 100 hours in).
+const clockRequest = z.object({ type: z.literal("clock"), playing: z.boolean().optional(), t: z.number().finite().min(0).max(360_000).optional() });
+const roomRequest = z.discriminatedUnion("type", [applyRequest, clockRequest]);
 
 /**
  * Who's on a socket: its cookie's person, or (with none) whoever its first
@@ -145,9 +151,15 @@ const badBody = (result: { success: boolean; error?: unknown }, c: Context) => {
   }
 };
 
-export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, sketches, instances = null, health = null }: ApiDeps) {
+export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, sketches, instances = null, health = null, show = null }: ApiDeps) {
   const api = new Hono<AuthEnv>();
   api.onError(handleError);
+  // Every room socket with someone on it: the show clock goes to all of them.
+  const heard = new Set<(message: string) => void>();
+  show?.subscribe((clock) => {
+    const message = JSON.stringify({ type: "clock", clock } satisfies RoomMessage);
+    for (const say of heard) say(message);
+  });
   // Browsers already refuse cross-site JSON requests without CORS headers,
   // and the session cookie is SameSite=Lax; this also covers non-browser
   // clients that set a foreign Origin. In development, a page from whatever
@@ -348,8 +360,9 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, s
     // changes, which stands for the whole ones waiting before it, so those
     // needn't be made, and the room keeps up with the latest. Their answers
     // wait on a paced scene (feed.soon), so a drag doesn't send the whole
-    // scene to every browser at each step. Its origin is checked as every
-    // request's is (above): a socket isn't held to the same-origin rule.
+    // scene to every browser at each step. The show clock, set here, goes to
+    // everyone (show.ts). Its origin is checked as every request's is
+    // (above): a socket isn't held to the same-origin rule.
     .get(
       "/scene/ws",
       upgradeWebSocket((c) => {
@@ -404,12 +417,15 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, s
             const scene = (json: string) => say(`{"type":"scene","feed":${json}}`);
             on = whoIsOn(cookie, config, ws, (u) => {
               user = u;
+              heard.add(say);
               void (async () => {
                 const now = feed.current() ?? (await feed.now(), feed.current());
                 if (closed) return;
                 if (now) scene(now.json);
                 unsubscribe = feed.subscribe((_feed, json) => scene(json));
               })();
+              const clock = show?.current();
+              if (clock) answer({ type: "clock", clock });
               void make();
             });
             ping = setInterval(() => say('{"type":"ping"}'), STREAM_PING_MS);
@@ -418,9 +434,9 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, s
             const text = typeof evt.data === "string" && evt.data.length <= MAX_APPLY_BYTES ? evt.data : "";
             // Who's there, first (from another of vibes' addresses).
             if (on?.take(text) === null) return;
-            let asked: ReturnType<typeof applyRequest.safeParse> | null = null;
+            let asked: ReturnType<typeof roomRequest.safeParse> | null = null;
             try {
-              asked = applyRequest.safeParse(JSON.parse(text));
+              asked = roomRequest.safeParse(JSON.parse(text));
             } catch {
               // Not JSON: refused below.
             }
@@ -428,11 +444,20 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, s
               answer({ type: "refused", id: "", at: 0, error: "invalid request", code: "bad_body", made: {} });
               return;
             }
-            waiting.push({ id: asked.data.id, changes: asked.data.changes, whole: asked.data.whole ?? false });
+            const m = asked.data;
+            if (m.type === "clock") {
+              if (m.playing === undefined && m.t === undefined) return;
+              const clock = show?.set({ ...(m.playing !== undefined ? { playing: m.playing } : {}), ...(m.t !== undefined ? { t: m.t } : {}) });
+              // In the history: started, stopped, and moved (a run of moves from one person as one entry).
+              if (clock && user) db.logCoalesced({ user, action: "show.clock", detail: { playing: clock.playing, t: Math.round(clock.t * 10) / 10 } }, ROOMTONE_LOG_WINDOW_MS, (last) => last?.playing === clock.playing);
+              return;
+            }
+            waiting.push({ id: m.id, changes: m.changes, whole: m.whole ?? false });
             void make();
           },
           onClose() {
             closed = true;
+            heard.delete(say);
             on?.done();
             unsubscribe();
             clearInterval(ping);

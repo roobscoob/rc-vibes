@@ -19,7 +19,8 @@
 // __vibes.connect), and the library opens a stream to vibes, saying what's
 // declared, and takes each change as it comes (wire.ts has the protocol). The
 // link and the values are kept on globalThis, so a new script in the same
-// sandbox carries on from them; the declarations are the script's own.
+// sandbox carries on from them; the declarations are the script's own. The
+// show clock (show.ts) comes on the same stream, and is kept the same way.
 //
 // The preview and the map's simulation have no stream: they hand values in
 // with __vibes.apply(), the same events the stream carries.
@@ -29,6 +30,7 @@ import { field, type Field } from "./field.ts";
 import type { Here } from "./here.ts";
 import {
   checkSpec,
+  clockValue,
   passes,
   PROTOCOL,
   valuesOf,
@@ -36,6 +38,7 @@ import {
   type ChangeEvent,
   type Changes,
   type ColorValue,
+  type HeardClock,
   type ParamSpec,
   type ParamTable,
   type StateEvent,
@@ -85,15 +88,17 @@ const LASTED_MS = 30_000;
 const QUIET_MS = 45_000;
 
 /**
- * What outlives a script in its sandbox: the values, the link, and the
- * stream: the one open now, which start of one that was (each counts up),
- * the next try at one (and whose), how long that waits, and whether another
- * stream took over. The stream's kept here, not in a script's own module, so
- * a new script's stream and anything an old one left behind can't both carry
- * on: only the newest script's library (owner) opens one.
+ * What outlives a script in its sandbox: the values, the show clock, the
+ * link, and the stream: the one open now, which start of one that was (each
+ * counts up), the next try at one (and whose), how long that waits, and
+ * whether another stream took over. The stream's kept here, not in a
+ * script's own module, so a new script's stream and anything an old one left
+ * behind can't both carry on: only the newest script's library (owner) opens
+ * one.
  */
 interface Kept {
   values: ParamTable;
+  clock: HeardClock | null;
   link: Link | null;
   owner: unknown;
   stream: { abort(): void } | null;
@@ -110,9 +115,10 @@ function kept(): Kept {
   const g = globalThis as Record<string, unknown>;
   let k = g[KEPT] as Kept | undefined;
   if (!k || typeof k !== "object" || typeof k.values !== "object" || k.values === null) {
-    g[KEPT] = k = { values: {}, link: null, owner: null, stream: null, started: 0, retry: null, retryBy: null, wait: FIRST_WAIT_MS, halted: false };
+    g[KEPT] = k = { values: {}, clock: null, link: null, owner: null, stream: null, started: 0, retry: null, retryBy: null, wait: FIRST_WAIT_MS, halted: false };
   }
   // Kept by an older library: what it didn't keep.
+  k.clock ??= null;
   k.started ??= 0;
   k.retry ??= null;
   k.wait ??= FIRST_WAIT_MS;
@@ -206,7 +212,22 @@ function apply(event: string, data: unknown): boolean {
     k.values = { ...k.values, [spec.name]: withChanges(spec, k.values[spec.name], d!.set as Changes) };
     return true;
   }
+  if (event === "clock") {
+    const c = clockValue(data);
+    if (!c) return false;
+    k.clock = { ...c, at: Date.now() };
+    return true;
+  }
   return false;
+}
+
+/** The show clock as last heard (show.ts reads it); null before vibes has said. */
+export const heardClock = (): HeardClock | null => kept().clock;
+
+// Whether this script reads the show clock (show.time or show.playing): the preview shows a transport if so.
+let wantsShow = false;
+export function wantShow(): void {
+  wantsShow = true;
 }
 
 // This script: whether its stream is open, and whether it's to open soon.
@@ -356,6 +377,8 @@ export interface VibesHost {
   connect(opts: unknown): { v: number; params?: number; error?: string };
   apply(event: string, data: unknown): boolean;
   params(): ParamSpec[];
+  /** Whether the script reads the show clock. */
+  show(): boolean;
 }
 
 // This script is the sandbox's newest: its library's the one to keep the stream.
@@ -366,4 +389,5 @@ kept().owner = me;
   connect,
   apply,
   params: () => [...declared.values()],
+  show: () => wantsShow,
 } satisfies VibesHost;
