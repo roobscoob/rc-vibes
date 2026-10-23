@@ -23,7 +23,7 @@
 // preview, with why in the console.
 
 import type { Frame, LightInfo } from "../../shared/arclamp.ts";
-import { withChanges, type ParamSpec, type ParamTable, type ParamValue } from "../../shared/params.ts";
+import { clockAt, withChanges, type ClockPatch, type HeardClock, type ParamSpec, type ParamTable, type ParamValue } from "../../shared/params.ts";
 import type { FrameSource } from "../live.ts";
 import { baseState, mergeOutput, prevOf, type RoomState } from "../sim.ts";
 // Inline, so it also starts where a page can't load a worker from a URL (a
@@ -68,6 +68,9 @@ export class SketchRunner implements FrameSource {
   params: ParamSpec[] = [];
   /** The knobs' values here: the preview's own, kept across restarts and new builds, handed to the sketch as vibes' stream would in the room. */
   values: ParamTable = {};
+  /** Whether the sketch reads the show clock; and the preview's own clock, kept the same way, to rehearse any part of a piece. */
+  usesClock = false;
+  clock: HeardClock | null = null;
   /** Bumped whenever any of the above changes, for React. */
   version = 0;
 
@@ -161,8 +164,10 @@ export class SketchRunner implements FrameSource {
       if (m.type === "log") this.write(m.level, m.text);
       else if (m.type === "params") {
         this.params = m.specs;
-        // A fresh sandbox starts from the defaults: the knobs' values, again.
+        this.usesClock = m.clock;
+        // A fresh sandbox (or an update) starts from the defaults: the knobs' values, and the clock, again.
         this.post({ type: "params", values: this.values });
+        this.sendClock();
         this.changed();
       } else if (m.type === "out") this.answer(m.seq, m.out);
       else if (m.type === "hmr") this.onHmr?.(m.payload);
@@ -182,6 +187,19 @@ export class SketchRunner implements FrameSource {
     this.values = { ...this.values, [name]: withChanges(spec, this.values[name], changes.map(([id, v]) => [v, [id]])) };
     this.post({ type: "params", values: this.values });
     this.changed();
+  }
+
+  /** The show clock here: started, stopped or moved from the transport. */
+  setClock(patch: ClockPatch) {
+    const now = Date.now();
+    const was = clockAt(this.clock, now) ?? { playing: false, t: 0 };
+    this.clock = { playing: patch.playing ?? was.playing, t: Math.max(0, patch.t ?? was.t), at: now };
+    this.sendClock();
+    this.changed();
+  }
+
+  private sendClock() {
+    if (this.clock) this.post({ type: "clock", clock: clockAt(this.clock, Date.now())! });
   }
 
   dispose() {

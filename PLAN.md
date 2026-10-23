@@ -532,9 +532,20 @@ color lights only. The rules on both ends are the library's
   them before they're applied, and live mode applies them as they move. The
   editor's Sketch panel has knobs of its own, for every light, straight
   into its worker.
+- **The show clock.** One for the room, in vibes' memory (`src/server/show.ts`):
+  where the piece is, and whether it's running. The transport in the HUD
+  starts, stops and sets it (`clock` over the room socket); vibes tells
+  every browser where it is now, and every linked shader on its stream
+  (`clock`), as it changes and on each stream's open. In the library,
+  `show.time` and `show.playing` are fields, run on smoothly between words
+  from vibes at the frame's clock. A piece is sections by time, so cues are
+  lines in the sketch. The preview page has a clock of its own, to rehearse
+  any part. Nothing's written: a vibes that starts over starts it at 0,
+  stopped.
 
 Still to come: a shader that drops some of what it declares (or won't say)
-only says so in vibes' log, not in the panel.
+only says so in vibes' log, not in the panel. Scenes saved and cued by time
+beside the clock, rather than lines in a sketch.
 
 ## Gaps in arclamp (PRs to rclamp)
 

@@ -11,12 +11,14 @@ import { Pending } from "./components/Pending.tsx";
 import { RoomMap, type SelectMode } from "./components/RoomMap.tsx";
 import { SelectionPanel } from "./components/SelectionPanel.tsx";
 import { TagChips } from "./components/TagChips.tsx";
+import { Transport } from "./components/Transport.tsx";
 import { UserMenu } from "./components/UserMenu.tsx";
 import { FLOORS } from "./floors.ts";
 import { useLiveStream } from "./live.ts";
 import { useNarrow } from "./narrow.ts";
 import { usePeek } from "./peek.ts";
 import { savedFloor, saveFloor, useLiveMode } from "./settings.ts";
+import { setClock, useClock } from "./show.ts";
 import { useSimulation } from "./sim.ts";
 import { navigate, usePath, useQueryParam } from "./route.ts";
 import { SplitHandle, StreetView } from "./components/StreetView.tsx";
@@ -94,11 +96,13 @@ function Shell() {
   }, [liveMode]);
   const previewing = pending > 0 && (!liveMode || liveError !== null);
   const simulated = previewing || peeking;
+  // The show clock, for the preview's sketches to follow as the room's do.
+  const clock = useClock();
   const simInputs = useMemo(() => {
     // Each is previewed once its script's here: a sketch being added, once it's built.
     const layers = layersOf(live, draft).filter((l) => l.script !== "");
-    return { lights: all, layers: peeking ? layers.map((l) => ({ ...l, muted: true })) : layers, template: templateOf(live, draft) };
-  }, [all, live, draft, peeking]);
+    return { lights: all, layers: peeking ? layers.map((l) => ({ ...l, muted: true })) : layers, template: templateOf(live, draft), clock };
+  }, [all, live, draft, peeking, clock]);
   // Their builds, asked for and watched.
   useAddingBuilds();
   useSimulation(simulated, simInputs);
@@ -265,6 +269,7 @@ function Shell() {
             <TagChips lights={here} selected={selectedHere} onSelect={selectByTag} />
           )}
           <SketchesLink />
+          <Transport clock={clock} onSet={setClock} />
           <UserMenu />
         </div>
       </div>

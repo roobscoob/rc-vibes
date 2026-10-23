@@ -12,6 +12,9 @@
 // stream that breaks opens again with every value. A shader too slow to read
 // its stream loses the stream, not a change.
 //
+// The show clock goes down the stream too (clock), once it's been set: on
+// open, and as it changes (show.ts).
+//
 // The token is the instance's id and its link's number, signed: linking again
 // counts up, so older tokens stop working. It's in arclamp's audit log (with
 // the eval). Whoever can read that can read the instance's values, say what
@@ -23,9 +26,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { checkSpec, MAX_PARAMS, PROTOCOL, type Changes, type ColorValue, type EndEvent, type ParamSpec } from "../shared/params.ts";
+import { checkSpec, MAX_PARAMS, PROTOCOL, type Changes, type ColorValue, type EndEvent, type ParamSpec, type ShowClock } from "../shared/params.ts";
 import type { Arclamp } from "./arclamp.ts";
 import type { Db } from "./db.ts";
+import type { ShowClockSource } from "./show.ts";
 
 const KEEP_ALIVE_MS = 15_000;
 // More than this waiting for a shader to read, and its stream goes.
@@ -157,6 +161,8 @@ export interface LinkDeps {
   url: string;
   /** Told when what an instance declares changes (the scene feed shows it). */
   changed?: () => void;
+  /** The show clock, sent down each stream once it's set, and as it changes. */
+  show?: ShowClockSource | null;
   now?: () => number;
 }
 
@@ -164,7 +170,7 @@ export interface LinkDeps {
 // changed is the new one's, not the old's.
 const STALE_SLACK_MS = 2_000;
 
-export function createParamLinks({ db, arclamp, secret, url, changed = () => {}, now = Date.now }: LinkDeps) {
+export function createParamLinks({ db, arclamp, secret, url, changed = () => {}, show = null, now = Date.now }: LinkDeps) {
   const streams = new Map<string, Stream>();
   // When each instance's stream opened, and when the scene last said its shader's sandbox or script changed.
   const opened = new Map<string, number>();
@@ -243,6 +249,12 @@ export function createParamLinks({ db, arclamp, secret, url, changed = () => {},
   const timer = setInterval(check, WATCH_MS);
   timer.unref();
 
+  const clockText = (clock: ShowClock) => eventText("clock", clock);
+  const unsubscribeShow =
+    show?.subscribe((clock) => {
+      for (const s of streams.values()) s.write(clockText(clock));
+    }) ?? (() => {});
+
   const bearer = (header: string | undefined) => {
     const [scheme, token = ""] = (header ?? "").split(" ");
     return scheme?.toLowerCase() === "bearer" ? linkOfToken(secret, token) : null;
@@ -307,6 +319,8 @@ export function createParamLinks({ db, arclamp, secret, url, changed = () => {},
           opened.set(inst.id, now());
           tries.delete(inst.id);
           stream.write(eventText("state", { v: PROTOCOL, values: db.instance(inst.id)?.params ?? {} }));
+          const clock = show?.current();
+          if (clock) stream.write(clockText(clock));
           return response;
         },
       );
@@ -314,6 +328,7 @@ export function createParamLinks({ db, arclamp, secret, url, changed = () => {},
 
     stop() {
       clearInterval(timer);
+      unsubscribeShow();
       for (const s of streams.values()) s.end();
     },
   };

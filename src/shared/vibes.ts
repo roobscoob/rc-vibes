@@ -1,7 +1,7 @@
 // Types for vibes' own API (/api/*), shared by the server and the browser.
 
 import type { Channels, Coords, LightsResponse, RailSpot, RoomTemplate, ShaderState } from "./arclamp.ts";
-import type { Changes, ShaderParams } from "./params.ts";
+import type { Changes, ClockPatch, ShaderParams, ShowClock } from "./params.ts";
 import type { RailShape } from "./rails.ts";
 
 export interface Person {
@@ -144,9 +144,10 @@ export type Change =
  * (ApiToken), in place of a cookie. An apply that's `whole` carries
  * everything the browser has pending (live mode sends one each time that
  * changes, without waiting): it stands for any whole one waiting before it,
- * which are answered as it is.
+ * which are answered as it is. Also the show clock, started, stopped or
+ * moved.
  */
-export type RoomRequest = { type: "apply"; id: string; changes: Change[]; whole?: boolean } | { type: "auth"; token: string };
+export type RoomRequest = { type: "apply"; id: string; changes: Change[]; whole?: boolean } | { type: "auth"; token: string } | ({ type: "clock" } & ClockPatch);
 
 /** What a browser says first over the light stream (/api/stream), on a socket to vibes at another address than the page's. */
 export type StreamRequest = { type: "auth"; token: string };
@@ -155,13 +156,15 @@ export type StreamRequest = { type: "auth"; token: string };
  * What vibes says over it: the scene (as it starts, and as it changes), a
  * ping (every 10 s at least), and each apply's answer: all of it made, or
  * refused at one change (the ones before it made). Either way, the shaders it
- * added, by the keys of the edits that added them.
+ * added, by the keys of the edits that added them. Also the show clock (where
+ * it is now), as it's set, and once it's been, on open.
  */
 export type RoomMessage =
   | { type: "scene"; feed: SceneFeed }
   | { type: "ping" }
   | { type: "applied"; id: string; made: Record<string, ShaderKey> }
-  | { type: "refused"; id: string; at: number; error: string; code: string; made: Record<string, ShaderKey> };
+  | { type: "refused"; id: string; at: number; error: string; code: string; made: Record<string, ShaderKey> }
+  | { type: "clock"; clock: ShowClock };
 
 /** The sketch a shader was built from, as its stamp says. */
 export interface ShaderSketch {

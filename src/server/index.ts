@@ -19,6 +19,7 @@ import { createHealthWatch } from "./health.ts";
 import { createInstances, type Instances } from "./instances.ts";
 import { createParamLinks } from "./params.ts";
 import { createSceneFeed } from "./scene-feed.ts";
+import { createShowClock } from "./show.ts";
 import { boxApiRoutes, sketchRoutes } from "./sketches.ts";
 import { createStreamRelay } from "./stream.ts";
 
@@ -43,11 +44,13 @@ const proxy = boxes ? createBoxProxy(config, db, boxes) : null;
 // the light stream; arclamp's health, likewise; and sketches put in the room
 // (instances).
 let instances: Instances | null = null;
+// The show clock: one for the room, told to every browser and sketch as it's set.
+const show = createShowClock();
 // Instances' params: each shader linked once (an eval), then a stream from it, taking each change.
 // Only where shaders can reach vibes (VIBES_SHADER_URL; env.ts).
 const params =
   builds && config.shaderUrl
-    ? createParamLinks({ db, arclamp, secret: config.sessionSecret, url: `${config.shaderUrl}/shader-api/params`, changed: () => feed.poke() })
+    ? createParamLinks({ db, arclamp, secret: config.sessionSecret, url: `${config.shaderUrl}/shader-api/params`, changed: () => feed.poke(), show })
     : null;
 const feed = createSceneFeed({
   config,
@@ -86,7 +89,7 @@ if (sketches) app.route("/", boxApiRoutes(config, sketches, db, lights));
 if (builds) app.route("/", buildApiRoutes(config, builds));
 if (params) app.route("/", params.routes());
 const sketchApi = sketches && boxes && builds ? sketchRoutes(sketches, db, boxes, builds) : null;
-app.route("/api", apiRoutes({ config, arclamp: noted, db, relay, origins, lights, feed, sketches: sketchApi, instances, health }));
+app.route("/api", apiRoutes({ config, arclamp: noted, db, relay, origins, lights, feed, sketches: sketchApi, instances, health, show }));
 if (config.production) {
   // The built files' dates are Nix's (1970), which browsers take to mean the
   // page is fresh for years: a cached page then loads without the network

@@ -5,10 +5,12 @@
 // applies, a draft's changes sent as one (applyChanges), each answered once
 // the scene showing it has come. The feed leaves scripts out (scriptHash says
 // which each is); the preview needs them to run pending edits, so they're
-// fetched once each, by hash, and put back.
+// fetched once each, by hash, and put back. The show clock rides the same
+// socket both ways (show.ts).
 
 import { useSyncExternalStore } from "react";
 import type { RoomTemplate } from "../shared/arclamp.ts";
+import type { ClockPatch, ShowClock } from "../shared/params.ts";
 import type { Change, RoomMessage, RoomRequest, SceneFeed, Shader, ShaderKey } from "../shared/vibes.ts";
 import { apiSocket, request } from "./api.ts";
 
@@ -132,6 +134,7 @@ function connect(url: string, hello: string | null, greet: (ws: WebSocket) => vo
     heard = Date.now();
     const m = JSON.parse(e.data) as RoomMessage;
     if (m.type === "scene") take(m.feed);
+    if (m.type === "clock") for (const l of clockListeners) l(m.clock);
     if (m.type !== "applied" && m.type !== "refused") return;
     const asked = waiting.get(m.id);
     waiting.delete(m.id);
@@ -189,6 +192,23 @@ export function applyChanges(changes: Change[], whole = false): Promise<Record<s
     open();
     void greeted!.then((ws) => ws.send(JSON.stringify({ type: "apply", id, changes, ...(whole ? { whole } : {}) } satisfies RoomRequest)));
   });
+}
+
+// The show clock, as vibes says it.
+const clockListeners = new Set<(clock: ShowClock) => void>();
+
+/** Told the show clock as it's set (and once it's been, as the socket opens). Returns an unsubscribe function. */
+export function onClock(listener: (clock: ShowClock) => void) {
+  clockListeners.add(listener);
+  return () => {
+    clockListeners.delete(listener);
+  };
+}
+
+/** Start, stop or move the show clock: vibes tells everyone, this browser too. No answer's waited for. */
+export function sayClock(patch: ClockPatch) {
+  open();
+  void greeted!.then((ws) => ws.send(JSON.stringify({ type: "clock", ...patch } satisfies RoomRequest)));
 }
 
 const snapshot = () => state;

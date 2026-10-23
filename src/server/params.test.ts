@@ -3,6 +3,7 @@ import type { ParamSpec } from "../shared/params.ts";
 import { ArclampError } from "./arclamp.ts";
 import { openDb, type Db } from "./db.ts";
 import { createParamLinks, declarationsOf, linkOfToken, linkToken, type ParamLinks, type SeenShader } from "./params.ts";
+import { createShowClock } from "./show.ts";
 
 const SECRET = "s".repeat(32);
 const speed: ParamSpec = { kind: "number", name: "speed", label: "Speed", lights: {}, default: 7, min: 0, max: 20, step: 0.1 };
@@ -172,6 +173,29 @@ describe("linking shaders, and their streams", () => {
     await settle();
     expect(evals).toHaveLength(2);
     expect(db.instance("i")!.link_epoch).toBe(2);
+  });
+
+  it("sends the show clock once it's set: as it changes, and on open, after every value", async () => {
+    const show = createShowClock(() => clock);
+    const withShow = createParamLinks({ db, arclamp: { evalShader: answer }, secret: SECRET, url: "https://vibes.test/shader-api/params", show, now: () => clock });
+    const connectTo = (token: string) =>
+      withShow.routes().request("/shader-api/params", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ v: 1, params: [speed] }) });
+    try {
+      db.updateInstance("i", { link_epoch: 1 });
+      const next = events(await connectTo(linkToken(SECRET, "i", 1)));
+      expect(await next()).toEqual({ event: "state", data: { v: 1, values: {} } });
+      clock = 50_000;
+      show.set({ playing: true, t: 12 });
+      expect(await next()).toEqual({ event: "clock", data: { t: 12, playing: true } });
+      // A stream opened later hears where it is now.
+      clock = 52_000;
+      const more = events(await connectTo(linkToken(SECRET, "i", 1)));
+      expect(await next()).toEqual({ event: "end", data: { reason: "replaced" } });
+      expect(await more()).toEqual({ event: "state", data: { v: 1, values: {} } });
+      expect(await more()).toEqual({ event: "clock", data: { t: 14, playing: true } });
+    } finally {
+      withShow.stop();
+    }
   });
 
   it("turns down a stream without the instance's last link's token, or in another protocol", async () => {
