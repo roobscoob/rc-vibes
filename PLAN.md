@@ -540,8 +540,9 @@ color lights only. The rules on both ends are the library's
   `show.time` and `show.playing` are fields, run on smoothly between words
   from vibes at the frame's clock. A piece is sections by time, so cues are
   lines in the sketch. The preview page has a clock of its own, to rehearse
-  any part. Nothing's written: a vibes that starts over starts it at 0,
-  stopped.
+  any part. Each start, stop and move is in the history (`show.clock`, a
+  run of moves from one person as one entry); the clock itself isn't
+  written: a vibes that starts over starts it at 0, stopped.
 
 Still to come: a shader that drops some of what it declares (or won't say)
 only says so in vibes' log, not in the panel. Scenes saved and cued by time

@@ -311,6 +311,7 @@ export type ActivityAction =
   | "shader.home"
   | "shader.param"
   | "roomtone.set"
+  | "show.clock"
   | "scene.clear"
   | "lights.move"
   | "lights.turn"

@@ -2,7 +2,8 @@
 // seconds, and whether it's running. Started, stopped and moved from the
 // transport in any browser (over the room socket, api.ts), and told to every
 // browser, and to every sketch in the room on its stream of params
-// (params.ts), as it changes, so they all agree where the piece is. Nothing's
+// (params.ts), as it changes, so they all agree where the piece is. Each
+// start, stop and move is in the history (api.ts); the clock itself isn't
 // written: a vibes that starts over starts it at 0, stopped.
 
 import { clockAt, type ClockPatch, type HeardClock, type ShowClock } from "../shared/params.ts";
