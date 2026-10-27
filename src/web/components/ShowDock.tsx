@@ -18,10 +18,13 @@
 // (Fade). In live mode that's the room, and the number keys fire scenes too;
 // otherwise it's pending edits, previewed on the map until Apply. Held with
 // Shift (a fire button, or a number key), a scene is momentary: in at once,
-// and out again when let go, back to the scene before. A MIDI controller's
-// pads fire the first few (set up in the account menu: midi-settings.ts). Turning a scene's knob keeps it in
-// the scene, and, for the scene fired last, turns it in the room too (as an
-// edit, so live mode or Apply).
+// and out again when let go, back to the scene before. Turning a scene's
+// knob keeps it in the scene, and, for the scene fired last, turns it in the
+// room too (as an edit, so live mode or Apply).
+//
+// The MIDI button maps a controller, as Ableton does: in map mode, scenes,
+// knobs, play, Tap and Sync light up; click one, then press or turn
+// something on the controller (midi-settings.ts).
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { LightInfo } from "../../shared/arclamp.ts";
@@ -29,21 +32,23 @@ import { pathOf } from "../../shared/live.ts";
 import { appliesTo, cleanValue, type ClockPatch, type HeardClock, type ParamValue } from "../../shared/params.ts";
 import { firingOf, knobsOf, mutesOf } from "../../shared/show-scenes.ts";
 import type { CueMode, Shader, ShowScene } from "../../shared/vibes.ts";
-import { drafts, pendingCount, useDraft } from "../draft.ts";
+import { currentDraft, drafts, pendingCount, useDraft } from "../draft.ts";
 import { CloseIcon } from "../icons.tsx";
 import { currentScene, sendUpdate, type Scene } from "../scene.ts";
-import { useShowMidi } from "../midi-settings.ts";
+import { hasMidi } from "../midi.ts";
+import { midi, useMidiSettings, useShowMidi } from "../midi-settings.ts";
 import { useLiveMode } from "../settings.ts";
 import { fireScene, sayScene, useShowScenes } from "../show-scenes.ts";
 import { AddSketch } from "./AddSketch.tsx";
 import { ColorParam } from "./ColorParam.tsx";
 import { ParamControl } from "./ParamControl.tsx";
 import { Segmented } from "./Segmented.tsx";
-import { Tempo } from "./Tempo.tsx";
+import { Mappable } from "./Mappable.tsx";
+import { syncTempo, tapTempo, Tempo } from "./Tempo.tsx";
 import { Transport } from "./Transport.tsx";
 
-/** How many scenes a controller's pads fire, from the first. */
-const PADS = 16;
+// A knob turned from a controller is kept in the scene fired at most this often.
+const KEEP_MS = 150;
 /** How many the number keys fire, from the first. */
 const KEYS = 9;
 const OPEN_KEY = "vibes.showDock";
@@ -169,8 +174,71 @@ export function ShowDock({ live, lights, home, clock, onClock, onHeight }: Props
       return sendUpdate([...knobs, ...mutesOf(off, true), ...mutesOf(on, false)]);
     });
   };
-  // MIDI, as set in the account menu: pads fire scenes, and a clock can set the tempo.
-  useShowMidi(PADS, (n) => fire(scenes[n - 1]), clock, onClock);
+  // MIDI: what a mapped control does (midi-settings.ts). A knob turned turns
+  // its sketch's knob in the room, on every light it's for, across its range,
+  // and the scene fired keeps it (if it's that scene's sketch).
+  const { mapping } = useMidiSettings();
+  const keeping = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; set: [number, ParamValue | null][] }>());
+  const turnKnob = (key: string, name: string, x: number) => {
+    const s = live.shaders.find((sh) => sh.key === key);
+    const spec = s?.pool ? live.pools[s.pool]?.declared?.find((p) => p.name === name) : undefined;
+    if (!s || !spec || spec.kind === "color") return;
+    const v = spec.kind === "toggle" ? x >= 0.5 : Math.min(spec.max, spec.min + Math.round((x * (spec.max - spec.min)) / spec.step) * spec.step);
+    const reach = new Set(s.instance?.home ?? s.footprint);
+    const changes = lights.filter((l) => reach.has(l.id) && appliesTo(spec, l)).map((l): [number, ParamValue] => [l.id, v]);
+    drafts.setParam(key, name, changes);
+    const scene = scenes.find((sc) => sc.id === fired);
+    if (!scene || !Object.hasOwn(scene.shaders, key)) return;
+    const k = `${scene.id}/${key}/${name}`;
+    const was = keeping.current.get(k);
+    if (was) {
+      was.set = changes;
+      return;
+    }
+    const entry = {
+      set: changes as [number, ParamValue | null][],
+      timer: setTimeout(() => {
+        keeping.current.delete(k);
+        sayScene({ op: "param", scene: scene.id, key, name, set: entry.set });
+      }, KEEP_MS),
+    };
+    keeping.current.set(k, entry);
+  };
+  // A knob pressed (a pad on an on-or-off one): flipped from what the room has, or will once what's pending is in.
+  const flipKnob = (key: string, name: string) => {
+    const s = live.shaders.find((sh) => sh.key === key);
+    const pool = s?.pool ? live.pools[s.pool] : undefined;
+    const spec = pool?.declared?.find((p) => p.name === name);
+    if (!s || !pool || spec?.kind !== "toggle") return;
+    const reach = new Set(s.instance?.home ?? s.footprint);
+    const first = lights.find((l) => reach.has(l.id) && appliesTo(spec, l));
+    if (!first) return;
+    // Pending: its value, or (null) back to the default.
+    const pending = currentDraft().edits[key]?.params?.[name]?.[String(first.id)];
+    const now = pending === null ? spec.default : pending !== undefined ? pending : (cleanValue(spec, pool.values[name]?.[String(first.id)]) ?? spec.default);
+    turnKnob(key, name, now === true ? 0 : 1);
+  };
+  useShowMidi({
+    clock,
+    onClock,
+    press(t) {
+      if (t.kind === "fire") fire(scenes.find((s) => s.id === t.scene));
+      else if (t.kind === "knob") flipKnob(t.key, t.name);
+      else if (t.kind === "play") onClock({ playing: !(clock?.playing ?? false) });
+      else if (t.kind === "tap") tapTempo(clock, onClock);
+      else if (t.kind === "sync") syncTempo(clock, onClock);
+    },
+    turn: (t, x) => turnKnob(t.key, t.name, x),
+  });
+  // Escape leaves map mode.
+  useEffect(() => {
+    if (!mapping) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") midi.setMapping(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mapping]);
   const latest = useRef({ scenes, liveMode, fire, hold, letGo });
   latest.current = { scenes, liveMode, fire, hold, letGo };
 
@@ -248,9 +316,11 @@ export function ShowDock({ live, lights, home, clock, onClock, onHeight }: Props
         ) : (
           <div className="dock-fires" role="group" aria-label="Scenes">
             {scenes.map((s, i) => (
-              <button key={s.id} className={`dock-fire ${classOf(s)}`} onClick={clickFire(s)} onPointerDown={pressFire(s)} title={fireTitle(s, i + 1)}>
-                <span className="mono">{i + 1}</span> {s.name}
-              </button>
+              <Mappable key={s.id} target={{ kind: "fire", scene: s.id }} label={`Fire ${s.name}`}>
+                <button className={`dock-fire ${classOf(s)}`} onClick={clickFire(s)} onPointerDown={pressFire(s)} title={fireTitle(s, i + 1)}>
+                  <span className="mono">{i + 1}</span> {s.name}
+                </button>
+              </Mappable>
             ))}
             {scenes.length === 0 && (
               <button className="dock-quiet" onClick={() => setOpen(true)}>
@@ -258,6 +328,16 @@ export function ShowDock({ live, lights, home, clock, onClock, onHeight }: Props
               </button>
             )}
           </div>
+        )}
+        {hasMidi() && (
+          <button
+            className={`dock-midi${mapping ? " on" : ""}`}
+            onClick={() => midi.setMapping(!mapping)}
+            aria-pressed={mapping}
+            title={mapping ? "Map mode: click something, then press or turn a control on your controller (right-click to unmap; Escape to finish)" : "Map MIDI: a controller's pads and knobs to scenes, knobs, play, Tap and Sync"}
+          >
+            MIDI
+          </button>
         )}
         <button className="dock-toggle" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Fold the show away" : "Open the show: the scenes and their knobs"}>
           {open ? "⌄" : "⌃"}
@@ -276,6 +356,7 @@ export function ShowDock({ live, lights, home, clock, onClock, onHeight }: Props
               const gone = !sketch && Object.keys(s.shaders).length > 0;
               return (
                 <li key={s.id} className={`cue ${classOf(s)}${shown?.id === s.id ? " picked" : ""}`} onClick={() => setPicked(s.id)}>
+                  <Mappable block target={{ kind: "fire", scene: s.id }} label={`Fire ${s.name}`}>
                   <div className="cue-top">
                     <span className="cue-n mono">{i + 1}</span>
                     <span className="cue-name" title={`${s.name}, by ${s.by.name}`}>
@@ -303,6 +384,7 @@ export function ShowDock({ live, lights, home, clock, onClock, onHeight }: Props
                   >
                     {liveMode ? "▶" : "◐"}
                   </button>
+                  </Mappable>
                 </li>
               );
             })}
@@ -363,7 +445,7 @@ function SceneKnobs({ scene, live, lights, inRoom, onSource }: { scene: ShowScen
             sayScene({ op: "param", scene: scene.id, key: s.key, name: spec.name, set: [...changes] });
             if (inRoom) drafts.setParam(s.key, spec.name, changes);
           };
-          return (
+          const control = (
             <ParamControl
               key={spec.name}
               spec={spec}
@@ -372,6 +454,14 @@ function SceneKnobs({ scene, live, lights, inRoom, onSource }: { scene: ShowScen
               onChange={onChange}
               colorPicker={ColorParam}
             />
+          );
+          // A controller's knob can turn any but a color.
+          return spec.kind === "color" ? (
+            control
+          ) : (
+            <Mappable key={spec.name} block target={{ kind: "knob", key: s.key, name: spec.name }} label={`${s.name}: ${spec.label}`}>
+              {control}
+            </Mappable>
           );
         })}
       </div>

@@ -31,21 +31,21 @@ export function UserMenu() {
           <input type="checkbox" checked={admin} onChange={(e) => setAdminMode(e.target.checked)} />
           <span>
             Admin mode
-            <small>Shows room-wide controls: editing lights on the map, and clearing every shader. Anyone can turn it on; it only guards against slips.</small>
+            <small>Shows room-wide controls: editing lights on the map, and clearing every shader.</small>
           </span>
         </label>
         <label className="menu-switch">
           <input type="checkbox" checked={liveMode} onChange={(e) => setLiveMode(e.target.checked)} />
           <span>
             Live
-            <small>Skips the preview: changes go to the room as you make them, with nothing to apply.</small>
+            <small>Skips the preview</small>
           </span>
         </label>
         <label className="menu-switch">
           <input type="checkbox" checked={showMode} onChange={(e) => setShowMode(e.target.checked)} />
           <span>
             Show
-            <small>A bar along the bottom for playing the room: the clock, the tempo, and scenes to fire.</small>
+            <small>live show scene selection</small>
           </span>
         </label>
         {showMode && <MidiSettings />}

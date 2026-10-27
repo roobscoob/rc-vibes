@@ -1,9 +1,11 @@
 // The transport: the show clock, to start, stop and set. On the map it's the
 // room's, run by vibes (show.ts), the same for everyone; on the preview page
-// it's the preview's own, to rehearse any part of a piece.
+// it's the preview's own, to rehearse any part of a piece. Play can be
+// mapped to a controller (midi-settings.ts).
 
 import { useEffect, useReducer, useState, type KeyboardEvent } from "react";
 import { clockAt, clockText, parseClockText, type ClockPatch, type HeardClock } from "../../shared/params.ts";
+import { Mappable } from "./Mappable.tsx";
 
 interface Props {
   /** The clock as last heard (null: never set, so 0, stopped). */
@@ -33,9 +35,11 @@ export function Transport({ clock, onSet }: Props) {
 
   return (
     <div className="transport" title="The show clock: every sketch that follows it agrees where the piece is">
+<Mappable target={{ kind: "play" }} label="Play">
       <button className="transport-button" onClick={() => onSet({ playing: !now.playing })} aria-label={now.playing ? "Stop the show clock" : "Start the show clock"}>
         {now.playing ? "❚❚" : "▶"}
       </button>
+      </Mappable>
       {typed === null ? (
         <button className="transport-time mono" onClick={() => setTyped(clockText(now.t))} title="Set the time (m:ss)">
           {clockText(now.t)}

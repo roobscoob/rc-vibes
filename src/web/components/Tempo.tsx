@@ -1,12 +1,14 @@
 // The show's tempo, beside the transport: a light on the beat (warm on the
 // downbeat, a bar's first), the beats a minute (click to type), Tap, and
-// Sync, which makes now the downbeat. (A MIDI clock sets it too: MidiPads.)
+// Sync, which makes now the downbeat. (A MIDI clock sets it too, and Tap and
+// Sync can be mapped to a controller: midi-settings.ts.)
 //
 // Tapping: two taps or more, each within two seconds of the last, set the
 // tempo from the taps' pace (the last eight), the first tap a downbeat.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { BEATS_PER_BAR, clockAt, MAX_BPM, MIN_BPM, type ClockPatch, type HeardClock } from "../../shared/params.ts";
+import { Mappable } from "./Mappable.tsx";
 
 interface Props {
   clock: HeardClock | null;
@@ -22,6 +24,28 @@ export const clamp = (bpm: number) => Math.min(MAX_BPM, Math.max(MIN_BPM, bpm));
 
 /** The first beat of the bar nearest `beat`: a downbeat. */
 export const barOf = (beat: number) => Math.round(beat / BEATS_PER_BAR) * BEATS_PER_BAR;
+
+// The run of taps (one for the page, whether tapped here or from a controller): the last few, the bar its first began, and how many beats on the last is.
+let taps: number[] = [];
+let run = { bar: 0, beats: 0 };
+
+/** A tap on the beat: from the second of a run, the tempo set from the run's pace. */
+export function tapTempo(clock: HeardClock | null, onSet: (patch: ClockPatch) => void) {
+  const now = performance.now();
+  const fresh = taps.length > 0 && now - taps[taps.length - 1]! < TAP_GAP_MS;
+  if (fresh) run.beats++;
+  else run = { bar: barOf(clockAt(clock, Date.now())?.beat ?? 0), beats: 0 };
+  taps = fresh ? [...taps, now].slice(-TAPS) : [now];
+  if (taps.length < 2) return;
+  const bpm = clamp(60_000 / ((taps[taps.length - 1]! - taps[0]!) / (taps.length - 1)));
+  onSet({ bpm: Math.round(bpm * 10) / 10, beat: run.bar + run.beats });
+}
+
+/** Sync: now's the downbeat (with a tempo). */
+export function syncTempo(clock: HeardClock | null, onSet: (patch: ClockPatch) => void) {
+  const beat = clockAt(clock, Date.now())?.beat;
+  if (beat !== undefined) onSet({ beat: barOf(beat) });
+}
 
 export function Tempo({ clock, onSet }: Props) {
   const latest = useRef({ clock, onSet });
@@ -46,22 +70,6 @@ export function Tempo({ clock, onSet }: Props) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // The run of taps: the last few, the bar its first began, and how many beats on the last is.
-  const taps = useRef<number[]>([]);
-  const run = useRef({ bar: 0, beats: 0 });
-  const tap = () => {
-    const now = performance.now();
-    const was = taps.current;
-    const fresh = was.length > 0 && now - was[was.length - 1]! < TAP_GAP_MS;
-    if (fresh) run.current.beats++;
-    else run.current = { bar: barOf(beatNow() ?? 0), beats: 0 };
-    taps.current = fresh ? [...was, now].slice(-TAPS) : [now];
-    const t = taps.current;
-    if (t.length < 2) return;
-    const bpm = clamp(60_000 / ((t[t.length - 1]! - t[0]!) / (t.length - 1)));
-    onSet({ bpm: Math.round(bpm * 10) / 10, beat: run.current.bar + run.current.beats });
-  };
-
   const [typed, setTyped] = useState<string | null>(null);
   const key = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -84,12 +92,16 @@ export function Tempo({ clock, onSet }: Props) {
       ) : (
         <input className="tempo-bpm mono" autoFocus value={typed} size={5} inputMode="decimal" onChange={(e) => setTyped(e.target.value)} onKeyDown={key} onBlur={() => setTyped(null)} aria-label="Beats a minute" />
       )}
-      <button className="tempo-tap" onClick={tap} title="Tap on the beat (the first tap a bar's first beat)">
-        Tap
-      </button>
-      <button className="tempo-sync" onClick={() => onSet({ beat: barOf(beatNow() ?? 0) })} disabled={bpm === undefined} title="Sync: now is the downbeat, the first beat of a bar">
-        Sync
-      </button>
+      <Mappable target={{ kind: "tap" }} label="Tap">
+        <button className="tempo-tap" onClick={() => tapTempo(clock, onSet)} title="Tap on the beat (the first tap a bar's first beat)">
+          Tap
+        </button>
+      </Mappable>
+      <Mappable target={{ kind: "sync" }} label="Sync">
+        <button className="tempo-sync" onClick={() => syncTempo(clock, onSet)} disabled={bpm === undefined} title="Sync: now is the downbeat, the first beat of a bar">
+          Sync
+        </button>
+      </Mappable>
     </div>
   );
 }
