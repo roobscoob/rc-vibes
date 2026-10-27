@@ -24,7 +24,7 @@
 import { Color, color, isPalette, type ColorInput } from "./color.ts";
 import type { Out, Prev, Update } from "./arclamp.ts";
 import { colorOf, Here, roomOf, sameLayout, type Room } from "./here.ts";
-import { tickParams } from "./param.ts";
+import { levelAt, tickParams } from "./param.ts";
 
 // Plain V8 (arclamp's sandbox) has only what arclamp's prelude gives it.
 declare const console: { warn(...data: unknown[]): void };
@@ -104,6 +104,9 @@ export function sketch(given: Looks | Look, options: SketchOptions = {}): Update
     const t = (frame - startOf(frame)) / 1000;
     const dt = last === null ? 0 : Math.min(MAX_DT, Math.max(0, (frame - last) / 1000));
     last = frame;
+    // How much of it shows over what's below (a scene blending it in or out): none, and it's left as it is.
+    const level = levelAt(Date.now());
+    if (level <= 0) return { lights: [] };
 
     const lights: Out["lights"] = [];
     for (let i = 0; i < list.length; i++) {
@@ -121,7 +124,7 @@ export function sketch(given: Looks | Look, options: SketchOptions = {}): Update
             "on",
             `light ${light.id} is an old bulb, which only switches: its look gives true or false, a number (on at 0.5 or more), or "on" or "off", not ${describe(v)}; give old bulbs a look of their own, sketch({ color, switch })`,
           );
-        } else if (on !== null) lights.push({ id: light.id, channels: { on: on ? 1 : 0 } });
+        } else if (on !== null) lights.push({ id: light.id, channels: { on: (level >= 0.5 ? on : light.belowOn) ? 1 : 0 } });
         continue;
       }
 
@@ -137,7 +140,7 @@ export function sketch(given: Looks | Look, options: SketchOptions = {}): Update
         }
         continue;
       }
-      const channels = c.channels;
+      const channels = (level < 1 ? light.below.mix(c, level) : c).channels;
       if (!Number.isFinite(channels.a) || !Number.isFinite(channels.b) || !Number.isFinite(channels.brightness) || !Number.isFinite(channels.fidelity)) {
         warn("nan", `light ${light.id} was given a color that isn't all numbers, ${JSON.stringify(c)}, so it's left as it is`);
         continue;

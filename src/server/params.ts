@@ -13,6 +13,10 @@
 // stream loses the stream, not a change. A sketch's preview, in its box,
 // follows its own pool the same way (a token from /box-api/pools: sketches.ts).
 //
+// The show clock goes down the stream too (clock), once it's been set: on
+// open, and as it changes (show.ts); and, as a scene blends a sketch in or
+// out, how much of it shows (level: show-scenes.ts).
+//
 // The token is the pool's id and its link's number, signed: linking again
 // counts up, so older tokens stop working. A shader's is in arclamp's audit
 // log (with the eval). Whoever can read that can read its values, say what
@@ -24,9 +28,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { checkSpec, MAX_PARAMS, PROTOCOL, type ColorValue, type EndEvent, type ParamSpec } from "../shared/params.ts";
+import { checkSpec, MAX_PARAMS, PROTOCOL, type ColorValue, type EndEvent, type ParamSpec, type ShowClock } from "../shared/params.ts";
 import type { Arclamp } from "./arclamp.ts";
 import type { Pools } from "./pools.ts";
+import type { ShowClockSource } from "./show.ts";
 
 const KEEP_ALIVE_MS = 15_000;
 // More than this waiting for a shader to read, and its stream goes.
@@ -157,6 +162,8 @@ export interface LinkDeps {
   secret: string;
   /** Where shaders reach vibes' stream (…/shader-api/params). */
   url: string;
+  /** The show clock, sent down each stream once it's set, and as it changes. */
+  show?: ShowClockSource | null;
   now?: () => number;
 }
 
@@ -164,7 +171,7 @@ export interface LinkDeps {
 // changed is the new one's, not the old's.
 const STALE_SLACK_MS = 2_000;
 
-export function createParamLinks({ pools, arclamp, secret, url, now = Date.now }: LinkDeps) {
+export function createParamLinks({ pools, arclamp, secret, url, show = null, now = Date.now }: LinkDeps) {
   // Each pool's stream: one at a time.
   const streams = new Map<string, Stream>();
   // When each pool's stream opened, and when the scene last said its shader's sandbox or script changed.
@@ -233,6 +240,12 @@ export function createParamLinks({ pools, arclamp, secret, url, now = Date.now }
   const timer = setInterval(check, WATCH_MS);
   timer.unref();
 
+  const clockText = (clock: ShowClock) => eventText("clock", clock);
+  const unsubscribeShow =
+    show?.subscribe((clock) => {
+      for (const s of streams.values()) s.write(clockText(clock));
+    }) ?? (() => {});
+
   const bearer = (header: string | undefined) => {
     const [scheme, token = ""] = (header ?? "").split(" ");
     return scheme?.toLowerCase() === "bearer" ? linkOfToken(secret, token) : null;
@@ -263,6 +276,13 @@ export function createParamLinks({ pools, arclamp, secret, url, now = Date.now }
 
     /** Whether a pool's code has its stream open. */
     linked: (pool: string) => streams.has(pool),
+
+    /** How much of a pool's sketch shows over what's below, from where it is to `to` over `ms` (a scene's blend). False if it has no stream to say it on. */
+    level(pool: string, to: number, ms: number): boolean {
+      const stream = streams.get(pool);
+      stream?.write(eventText("level", { to, ms }));
+      return stream !== undefined;
+    },
 
     routes() {
       return new Hono().post(
@@ -296,6 +316,8 @@ export function createParamLinks({ pools, arclamp, secret, url, now = Date.now }
           opened.set(p.id, now());
           tries.delete(p.id);
           stream.write(eventText("state", { v: PROTOCOL, values: pools.table(p.id) }));
+          const clock = show?.current();
+          if (clock) stream.write(clockText(clock));
           return response;
         },
       );
@@ -304,6 +326,7 @@ export function createParamLinks({ pools, arclamp, secret, url, now = Date.now }
     stop() {
       clearInterval(timer);
       unlisten();
+      unsubscribeShow();
       for (const s of streams.values()) s.end();
     },
   };

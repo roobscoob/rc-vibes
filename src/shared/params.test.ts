@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appliesTo, colorOfLemtone, factsOf, filterOf, kindOf, lemtoneOf, paramText, passes, valuesAt, withChanges, type ParamSpec } from "./params.ts";
+import { appliesTo, clockText, colorOfLemtone, factsOf, filterOf, kindOf, lemtoneOf, paramText, parseClockText, passes, valuesAt, withChanges, type ParamSpec } from "./params.ts";
 
 const speed: ParamSpec = { kind: "number", name: "speed", label: "Speed", lights: {}, default: 7, min: 0, max: 20, step: 0.1 };
 const on: ParamSpec = { kind: "toggle", name: "on", label: "On", lights: { kinds: ["switch"] }, default: false };
@@ -76,5 +76,27 @@ describe("a param's values", () => {
     const c = { a: 0.1, b: -0.05, lm: 400, fidelity: 0.5 };
     expect(lemtoneOf(c)).toEqual({ a: 0.1, b: -0.05, brightness: 0.4, fidelity: 0.5 });
     expect(colorOfLemtone(lemtoneOf(c))).toEqual(c);
+  });
+});
+
+describe("the show clock's time, as the transport shows and reads it", () => {
+  it("shows m:ss, and h:mm:ss past an hour", () => {
+    expect(clockText(0)).toBe("0:00");
+    expect(clockText(7.9)).toBe("0:07");
+    expect(clockText(150)).toBe("2:30");
+    expect(clockText(3600)).toBe("1:00:00");
+    expect(clockText(3725)).toBe("1:02:05");
+    expect(clockText(-3)).toBe("0:00");
+  });
+
+  it("reads m:ss, h:mm:ss, or seconds, and nothing else", () => {
+    expect(parseClockText("2:30")).toBe(150);
+    expect(parseClockText(" 1:02:05 ")).toBe(3725);
+    expect(parseClockText("45")).toBe(45);
+    expect(parseClockText("1.5")).toBe(1.5);
+    expect(parseClockText("")).toBeNull();
+    expect(parseClockText("2:3x")).toBeNull();
+    expect(parseClockText("-5")).toBeNull();
+    expect(parseClockText("1:2:3:4")).toBeNull();
   });
 });

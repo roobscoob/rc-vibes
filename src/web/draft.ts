@@ -19,7 +19,8 @@ import { useSyncExternalStore } from "react";
 import type { Channels } from "../shared/arclamp.ts";
 import { pathOf, type AddSpec, type Op, type Pool } from "../shared/live.ts";
 import { cleanValue, sameValue, tableOf, withChanges, type Changes, type ParamSpec, type ParamValue, type ShaderParams } from "../shared/params.ts";
-import type { Instance, ShaderKey, ShaderSketch } from "../shared/vibes.ts";
+import { firingOf } from "../shared/show-scenes.ts";
+import type { Instance, ShaderKey, ShaderSketch, ShowScene } from "../shared/vibes.ts";
 import { invalidateScene, sendUpdate, UpdateError, type Scene, type SceneShader } from "./scene.ts";
 
 /** A shader in the stack: vibes' key, for one in the room or on its way; "+…" for a sketch you're adding. */
@@ -453,6 +454,33 @@ export const drafts = {
     const now = { ...was, ...Object.fromEntries(changes.map(([id, v]) => [String(id), v])) };
     set({ ...draft, edits: { ...draft.edits, [key]: { ...draft.edits[key], params: { ...draft.edits[key]?.params, [name]: now } } } });
   },
+  /**
+   * A show scene fired, as pending edits (out of live mode, to preview it
+   * before it's applied): each shader's mute, and the knobs it sets, in
+   * place of whatever was pending for them.
+   */
+  previewScene(scene: ShowScene, live: Scene) {
+    const edits = { ...draft.edits };
+    for (const s of live.shaders) {
+      if (s.stage === "failed") continue;
+      const { muted: _, params, ...rest } = edits[s.key] ?? {};
+      edits[s.key] = scene.shaders[s.key] ? rest : { ...rest, ...(params ? { params } : {}) };
+    }
+    const { knobs, off, on } = firingOf(scene, live.shaders, live.pools);
+    for (const key of off) edits[key] = { ...edits[key], muted: true };
+    for (const key of on) edits[key] = { ...edits[key], muted: false };
+    // Its knobs, by its pools' paths (pools/<pool>/values/<param>/<light>): each shader's.
+    const keyOf = new Map(live.shaders.map((s) => [s.pool, s.key]));
+    for (const [path, ...v] of knobs) {
+      const [, pool, , name, light] = path.split("/");
+      const key = keyOf.get(pool!);
+      if (!key) continue;
+      const params = edits[key]?.params ?? {};
+      edits[key] = { ...edits[key], params: { ...params, [name!]: { ...params[name!], [light!]: v.length > 0 ? (v[0] as ParamValue) : null } } };
+    }
+    set({ ...draft, edits });
+  },
+
   reorder(keysTopFirst: LayerKey[]) {
     set({ ...draft, order: keysTopFirst });
   },

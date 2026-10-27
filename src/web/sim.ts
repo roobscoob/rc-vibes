@@ -10,13 +10,13 @@
 //
 // It differs from arclamp in running ~30 times a second rather than 100, on
 // the browser's JS engine, with browser rules for fetch (CORS), and without
-// udp. A shader's params, pending edits and all, are handed to it as vibes'
-// stream hands them over in the room. What a sketch being added declares, its
+// udp. A shader's params, pending edits and all, and the show clock, are
+// handed to it as vibes' stream hands them over in the room. What a sketch being added declares, its
 // preview here says (drafts.declared), so its knobs are there before it's in.
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { Channels, LightInfo } from "../shared/arclamp.ts";
-import type { ParamSpec, ShaderParams } from "../shared/params.ts";
+import { clockAt, type HeardClock, type ParamSpec, type ShaderParams } from "../shared/params.ts";
 import { drafts, type Layer, type LayerKey } from "./draft.ts";
 import { pushSimFrame, setSimulated } from "./live.ts";
 import type { FromWorker, ToWorker } from "./sim.worker.ts";
@@ -90,8 +90,9 @@ class ShaderWorker {
   private waiting = new Map<number, (out: unknown) => void>();
   /** The script couldn't load, or got stuck: nothing more to ask it. */
   stopped = false;
-  /** The params' values last sent it, as JSON. */
+  /** The params' values last sent it, as JSON; and the clock last sent it. */
   private sentParams: string | null = null;
+  private sentClock: string | null = null;
 
   readonly script: string;
 
@@ -141,6 +142,14 @@ class ShaderWorker {
     if (json === this.sentParams) return;
     this.sentParams = json;
     if (params) this.worker.postMessage({ type: "params", values: params.values } satisfies ToWorker);
+  }
+
+  /** The show clock, when it's changed since last sent: the sketch runs it on from there at the frame's clock. */
+  sendClock(clock: HeardClock | null | undefined) {
+    const key = clock ? `${clock.playing}:${clock.t}:${clock.at}:${clock.bpm}:${clock.beat}` : null;
+    if (key === this.sentClock) return;
+    this.sentClock = key;
+    if (clock) this.worker.postMessage({ type: "clock", clock: clockAt(clock, Date.now())! } satisfies ToWorker);
   }
 
   stop() {
@@ -209,6 +218,8 @@ interface Inputs {
   lights: LightInfo[];
   layers: Layer[];
   template: Record<string, Channels>;
+  /** The show clock as last heard, for the sketches that follow it. */
+  clock?: HeardClock | null;
 }
 
 class Simulation {
@@ -243,6 +254,7 @@ class Simulation {
         this.workers.set(key, (w = new ShaderWorker(layer.script, declared)));
       }
       w.sendParams(layer.params);
+      w.sendClock(inputs.clock);
     }
     for (const key of this.seen.keys()) if (!wanted.has(key)) this.seen.delete(key);
   }

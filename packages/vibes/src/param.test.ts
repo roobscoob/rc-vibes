@@ -109,6 +109,67 @@ describe("param()", () => {
     expect(n({ light: { id: 1, kind: "color", tags: [] } } as never)).toBe(1);
   });
 
+  it("keeps the show clock, run on from when it was said while it plays, and says whether the script reads it", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    const { host } = await load();
+    const { show } = await import("./show.ts");
+    expect(host.show?.()).toBe(false);
+    const t = show.time;
+    const playing = show.playing;
+    expect(host.show?.()).toBe(true);
+    const here = (now: number) => ({ now } as never);
+    expect(t(here(10_000))).toBe(0);
+    expect(playing(here(10_000))).toBe(false);
+    expect(host.apply("clock", { t: 12.5, playing: true })).toBe(true);
+    expect(t(here(10_000))).toBe(12.5);
+    expect(t(here(12_000))).toBe(14.5);
+    expect(playing(here(12_000))).toBe(true);
+    vi.setSystemTime(12_000);
+    host.apply("clock", { t: 3, playing: false });
+    expect(t(here(15_000))).toBe(3);
+    expect(host.apply("clock", { t: -1, playing: true })).toBe(false);
+    expect(host.apply("clock", { t: 1 })).toBe(false);
+  });
+
+  it("counts beats and bars on the show's tempo, whether the piece plays or not; 0 with none set", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    const { host } = await load();
+    const { show } = await import("./show.ts");
+    const [beat, bar, bpm] = [show.beat, show.bar, show.bpm];
+    const here = (now: number) => ({ now } as never);
+    expect([beat(here(10_000)), bpm(here(10_000))]).toEqual([0, 0]);
+    host.apply("clock", { t: 0, playing: false, bpm: 120, beat: 8 });
+    expect(beat(here(10_000))).toBe(8);
+    expect(beat(here(11_250))).toBe(10.5);
+    expect(bar(here(12_000))).toBe(3);
+    expect(bpm(here(12_000))).toBe(120);
+    host.apply("clock", { t: 0, playing: false, bpm: 999, beat: 8 });
+    expect(bpm(here(12_000))).toBe(0);
+  });
+
+  it("blends the sketch in and out by the level vibes says, from where it is, and shows all of it on a new stream", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    const { host, sketch, white, levelAt } = await load();
+    const update = sketch(white(4000, 1000));
+    const lit = () => update(room(), Date.now(), Date.now()).lights;
+    expect(levelAt(10_000)).toBe(1);
+    expect(host.apply("level", { to: 0, ms: 0 })).toBe(true);
+    expect(lit()).toEqual([]);
+    host.apply("level", { to: 1, ms: 400 });
+    expect(levelAt(10_200)).toBe(0.5);
+    vi.setSystemTime(10_200);
+    const half = lit().find((l) => l.id === 1)!.channels as { brightness: number };
+    expect(half.brightness).toBeGreaterThan(0);
+    expect(half.brightness).toBeLessThan(1);
+    // Turned back halfway: from where it is.
+    host.apply("level", { to: 0, ms: 400 });
+    expect(levelAt(10_200)).toBe(0.5);
+    expect(levelAt(10_600)).toBe(0);
+    expect(host.apply("level", { to: 2, ms: 0 })).toBe(false);
+    host.apply("state", { v: 1, values: {} });
+    expect(levelAt(10_600)).toBe(1);
+  });
+
   it("keeps the values, and not the declarations, through a new script", async () => {
     const first = await load();
     first.param("old", 1);

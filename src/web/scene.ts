@@ -6,12 +6,15 @@
 // stack of shaders, top first, the room tone, and the pools) and the lights'
 // layout (useLayout). The tree leaves scripts out (scriptHash says which
 // each shader's is); the preview needs them to run pending edits, so they're
-// fetched once each, by hash, and put back.
+// fetched once each, by hash, and put back. The show rides the same socket,
+// beside the tree: its clock both ways (show.ts), its scenes (show-scenes.ts),
+// and a scene fired, answered as an update is.
 
 import { useCallback, useState, useSyncExternalStore } from "react";
 import type { RoomTemplate } from "../shared/arclamp.ts";
 import { pathOf, withOps, type LiveTree, type Op, type Pool, type RoomMessage, type RoomRequest } from "../shared/live.ts";
-import type { Lights, Placement, RailChange, Shader, ShaderKey, TagChange, TypeChange } from "../shared/vibes.ts";
+import type { ClockPatch, ShowClock } from "../shared/params.ts";
+import type { Lights, Placement, RailChange, ScenePatch, Shader, ShaderKey, ShowScenes, TagChange, TypeChange } from "../shared/vibes.ts";
 import { apiSocket, request } from "./api.ts";
 
 /** A shader as vibes has it, with its script once that's here. */
@@ -189,6 +192,10 @@ function connect(url: string, hello: string | null, greet: (ws: WebSocket) => vo
       rev = m.rev;
       publishSoon();
       if (m.ops.some(([path]) => path.startsWith("shaders/"))) void fetchScripts();
+    } else if (m.type === "clock") {
+      for (const l of clockListeners) l(m.clock);
+    } else if (m.type === "scenes") {
+      for (const l of scenesListeners) l(m.scenes);
     } else if (m.type === "done" || m.type === "refused") {
       const asked = waiting.get(m.id);
       waiting.delete(m.id);
@@ -250,10 +257,57 @@ export function sendUpdate(ops: Op[], note?: string): Promise<Record<string, Sha
   });
 }
 
+// The show clock, as vibes says it.
+const clockListeners = new Set<(clock: ShowClock) => void>();
+
+/** Told the show clock as it's set (and once it's been, as the socket opens). Returns an unsubscribe function. */
+export function onClock(listener: (clock: ShowClock) => void) {
+  clockListeners.add(listener);
+  return () => {
+    clockListeners.delete(listener);
+  };
+}
+
+/** Start, stop or move the show clock: vibes tells everyone, this browser too. No answer's waited for. */
+export function sayClock(patch: ClockPatch) {
+  open();
+  void greeted!.then((ws) => ws.send(JSON.stringify({ type: "clock", ...patch } satisfies RoomRequest)));
+}
+
+// The show's scenes, as vibes says them.
+const scenesListeners = new Set<(scenes: ShowScenes) => void>();
+
+/** Told the show's scenes as the socket opens, and each time they change or one's fired. Returns an unsubscribe function. */
+export function onScenes(listener: (scenes: ShowScenes) => void) {
+  scenesListeners.add(listener);
+  return () => {
+    scenesListeners.delete(listener);
+  };
+}
+
+/** A show scene saved or changed: vibes tells everyone, this browser too. No answer's waited for. */
+export function sayScene(patch: ScenePatch) {
+  open();
+  void greeted!.then((ws) => ws.send(JSON.stringify({ type: "scene", ...patch } satisfies RoomRequest)));
+}
+
+/** A show scene fired: made in the room as the cue mode says, answered as an update is. `cut`: at once, whatever the cue mode. */
+export function fireScene(scene: string, { cut = false }: { cut?: boolean } = {}): Promise<Record<string, ShaderKey>> {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    waiting.set(id, { resolve, reject });
+    open();
+    void greeted!.then((ws) => ws.send(JSON.stringify({ type: "fire", id, scene, ...(cut ? { cut } : {}) } satisfies RoomRequest)));
+  });
+}
+
 const snapshot = () => state;
 const useState_ = () => useSyncExternalStore(subscribe, snapshot);
 
-/** The room, as `{ data }` (undefined until the first tree). */
+/** The room as vibes last said it, now (undefined before the first scene): for what can't wait for a render. */
+export const currentScene = () => state.scene;
+
+/** The room, as `{ data }` (undefined until the first scene). */
 export function useScene(): { data: Scene | undefined; error: Error | null } {
   const s = useState_();
   return { data: s.scene, error: s.error };

@@ -591,3 +591,25 @@ describe("switching a shader on and off", () => {
     expect(switchEverywhere(other(), false, ALL)).toEqual({ muted: true });
   });
 });
+
+describe("a show scene previewed", () => {
+  const speed = { kind: "number" as const, name: "speed", label: "Speed", lights: {}, default: 1, min: 0, max: 4, step: 0.1 };
+  const knobbed = shader(13, { muted: true, pool: "p13" });
+  const here = withPools(room(shader(12), knobbed), { p13: { declared: [speed], values: { speed: { "1": 2, "2": 2 } } } });
+  const scene = { id: "s", name: "Scene 1", shaders: { "rclamp-13": { speed: { "1": 3 } } }, by: { id: "u", name: "U" }, at: 0 };
+
+  it("switches off what it hasn't, and on what it has with its knobs, as pending edits", () => {
+    drafts.previewScene(scene, here);
+    const [top, mine] = layersOf(here, currentDraft());
+    expect([top!.muted, mine!.muted]).toEqual([true, false]);
+    expect(currentDraft().edits["rclamp-13"]!.params).toEqual({ speed: { "2": null, "1": 3 } });
+  });
+
+  it("stands in for what was pending for those shaders", () => {
+    drafts.patchShader("rclamp-12", { muted: false, mask: [5] });
+    drafts.setParam("rclamp-13", "speed", [[2, 4]]);
+    drafts.previewScene(scene, here);
+    expect(currentDraft().edits["rclamp-12"]).toEqual({ mask: [5], muted: true });
+    expect(currentDraft().edits["rclamp-13"]!.params).toEqual({ speed: { "2": null, "1": 3 } });
+  });
+});

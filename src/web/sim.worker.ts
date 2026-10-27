@@ -10,12 +10,13 @@
 // nothing ever arrives and sends go nowhere.
 //
 // A shader's params come as they would from vibes' stream in the room: all of
-// them, handed to the library with __vibes.apply (packages/vibes/src/param.ts).
+// them, handed to the library with __vibes.apply (packages/vibes/src/param.ts);
+// so does the show clock.
 // What it declares goes the other way, once it's loaded: for a sketch being
 // added, that's how the page knows its params before it's in the room.
 
 import type { VibesHost } from "../../packages/vibes/src/param.ts";
-import type { ParamSpec, ParamTable } from "../shared/params.ts";
+import type { ParamSpec, ParamTable, ShowClock } from "../shared/params.ts";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope & Record<string, unknown>;
 
@@ -44,7 +45,9 @@ export type ToWorker =
   | { type: "load"; script: string }
   | { type: "tick"; seq: number; prev: unknown; now: number; initial: number }
   /** Its params' values, all of them, as vibes' stream sends them. */
-  | { type: "params"; values: ParamTable };
+  | { type: "params"; values: ParamTable }
+  /** The show clock, where it is now, as vibes' stream sends it. */
+  | { type: "clock"; clock: ShowClock };
 export type FromWorker =
   /** Loaded, with what it declares as params (as the library has them; none without one). */
   | { type: "loaded"; declared: ParamSpec[] }
@@ -54,8 +57,10 @@ export type FromWorker =
 scope.onmessage = (e: MessageEvent<ToWorker>) => {
   const m = e.data;
   const reply = (r: FromWorker) => scope.postMessage(r);
-  if (m.type === "params") {
-    (scope.__vibes as VibesHost | undefined)?.apply("state", { v: 1, values: m.values });
+  if (m.type === "params" || m.type === "clock") {
+    const host = scope.__vibes as VibesHost | undefined;
+    if (m.type === "params") host?.apply("state", { v: 1, values: m.values });
+    else host?.apply("clock", m.clock);
     return;
   }
   if (m.type === "load") {

@@ -10,7 +10,8 @@
 //
 // Values are by light, grouped by value: [[value, [ids]], …], listing only the
 // lights that aren't at the default. A change is the same, with null putting
-// lights back to the default.
+// lights back to the default. The show clock comes the same way: where the
+// piece is, and whether it's running, run on from when it was said (show.ts).
 //
 // The stream (vibes' side: src/server/params.ts):
 //
@@ -19,6 +20,10 @@
 //
 //   event: state    data: { "v": 1, "values": { name: Groups } }   first, on every connect
 //   event: change   data: { "name": …, "set": Changes }            each edit, in order
+//   event: clock    data: { "t": 12.5, "playing": true, "bpm": 120, "beat": 33.5 }
+//                                                                   the show clock, once set: on connect, and as it changes
+//   event: level    data: { "to": 0, "ms": 250 }                     how much of the sketch shows over what's below (a scene's blend):
+//                                                                   from where it is to this, over this long; all of it on every connect
 //   event: end      data: { "reason": "replaced" | "revoked" | "gone" }
 //   : keep-alive                                                    every 15 s
 
@@ -97,6 +102,64 @@ export interface ChangeEvent {
 }
 export interface EndEvent {
   reason: "replaced" | "revoked" | "gone";
+}
+
+/**
+ * The show clock: where the piece is, in seconds, and whether it's running,
+ * as of when it was said; and its tempo, once one's set: beats a minute, and
+ * how many beats have gone by (a bar is 4). The beat runs on whether the
+ * piece is playing or not, as a band's tempo would.
+ */
+export interface ShowClock {
+  t: number;
+  playing: boolean;
+  bpm?: number;
+  beat?: number;
+}
+/** How much of a sketch shows over the layers below it, from where it is to `to` (0 to 1), over `ms`: a scene blending in or out. */
+export interface LevelEvent {
+  to: number;
+  ms: number;
+}
+/** The longest a blend takes. */
+export const MAX_BLEND_MS = 10_000;
+
+/** A level, if this is one as the wire has it. */
+export function levelValue(v: unknown): LevelEvent | null {
+  if (!v || typeof v !== "object") return null;
+  const { to, ms } = v as Record<string, unknown>;
+  return finite(to) && to >= 0 && to <= 1 && finite(ms) && ms >= 0 && ms <= MAX_BLEND_MS ? { to, ms } : null;
+}
+
+/** The slowest and fastest tempos there are. */
+export const MIN_BPM = 20;
+export const MAX_BPM = 300;
+/** Beats to a bar. */
+export const BEATS_PER_BAR = 4;
+/** The show clock as heard: at `at` (ms), it was at `t`, running on from there if it's playing. */
+export interface HeardClock extends ShowClock {
+  at: number;
+}
+
+/** Where the show clock is at `now` (ms), run on from when it was heard if it's playing; null if it's never been set. */
+export function clockAt(heard: HeardClock | null, now: number): ShowClock | null {
+  if (!heard) return null;
+  const gone = Math.max(0, now - heard.at) / 1000;
+  const at: ShowClock = { playing: heard.playing, t: heard.playing ? heard.t + gone : heard.t };
+  if (heard.bpm !== undefined) {
+    at.bpm = heard.bpm;
+    at.beat = (heard.beat ?? 0) + (gone * heard.bpm) / 60;
+  }
+  return at;
+}
+
+/** A show clock, if this is one as the wire has it. */
+export function clockValue(v: unknown): ShowClock | null {
+  if (!v || typeof v !== "object") return null;
+  const { t, playing, bpm, beat } = v as Record<string, unknown>;
+  if (!(finite(t) && t >= 0 && typeof playing === "boolean")) return null;
+  if (!(finite(bpm) && bpm >= MIN_BPM && bpm <= MAX_BPM)) return { t, playing };
+  return { t, playing, bpm, beat: finite(beat) && beat >= 0 ? beat : 0 };
 }
 
 /** What a filter looks at, of a light. */

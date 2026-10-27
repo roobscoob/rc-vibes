@@ -1,8 +1,9 @@
 import { useLogout, useMe } from "../api.ts";
 import { setGamutChoice, setHdrChoice, useDisplay, type Display, type GamutChoice } from "../display.ts";
-import { setAdminMode, setLiveMode, useAdminMode, useLiveMode } from "../settings.ts";
+import { setAdminMode, setLiveMode, setShowMode, useAdminMode, useLiveMode, useShowMode } from "../settings.ts";
 import { Avatar } from "./Avatar.tsx";
 import { Menu } from "./Menu.tsx";
+import { MidiSettings } from "./MidiSettings.tsx";
 import { Segmented } from "./Segmented.tsx";
 
 const GAMUTS: { value: GamutChoice; label: string }[] = [
@@ -11,11 +12,12 @@ const GAMUTS: { value: GamutChoice; label: string }[] = [
   { value: "display-p3", label: "P3" },
 ];
 
-/** Who's logged in, as an avatar that opens admin mode, live mode, how colors show, and logging out. */
+/** Who's logged in, as an avatar that opens admin mode, live mode, show mode, how colors show, and logging out. */
 export function UserMenu() {
   const me = useMe();
   const admin = useAdminMode();
   const liveMode = useLiveMode();
+  const showMode = useShowMode();
   const display = useDisplay();
   const logout = useLogout();
   const name = me.data?.name ?? "";
@@ -29,16 +31,24 @@ export function UserMenu() {
           <input type="checkbox" checked={admin} onChange={(e) => setAdminMode(e.target.checked)} />
           <span>
             Admin mode
-            <small>Shows room-wide controls: editing lights on the map, and clearing every shader. Anyone can turn it on; it only guards against slips.</small>
+            <small>Shows room-wide controls: editing lights on the map, and clearing every shader.</small>
           </span>
         </label>
         <label className="menu-switch">
           <input type="checkbox" checked={liveMode} onChange={(e) => setLiveMode(e.target.checked)} />
           <span>
             Live
-            <small>Skips the preview: changes go to the room as you make them, with nothing to apply.</small>
+            <small>Skips the preview</small>
           </span>
         </label>
+        <label className="menu-switch">
+          <input type="checkbox" checked={showMode} onChange={(e) => setShowMode(e.target.checked)} />
+          <span>
+            Show
+            <small>live show scene selection</small>
+          </span>
+        </label>
+        {showMode && <MidiSettings />}
         <div className="menu-field">
           <span>
             Colors

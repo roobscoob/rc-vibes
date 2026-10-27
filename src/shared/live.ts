@@ -32,8 +32,8 @@
 // Nothing is an array but a value: paths only go through objects.
 
 import type { Channels, LightInfo, Rail } from "./arclamp.ts";
-import type { ParamSpec, ParamValue } from "./params.ts";
-import type { Shader, ShaderKey } from "./vibes.ts";
+import type { ClockPatch, ParamSpec, ParamValue, ShowClock } from "./params.ts";
+import type { ScenePatch, Shader, ShaderKey, ShowScenes } from "./vibes.ts";
 
 /** Where a value is in the tree: its keys, joined with "/". */
 export type Path = string;
@@ -179,13 +179,26 @@ export function diff(a: unknown, b: unknown, prefix: Path = ""): Op[] {
 /** Whether `path` is `prefix` or under it. */
 export const under = (path: Path, prefix: Path) => path === prefix || path.startsWith(`${prefix}/`);
 
-/** The room socket: what a page says (after `auth`, from another of vibes' addresses), and what vibes says. */
+/**
+ * The room socket: what a page says (after `auth`, from another of vibes'
+ * addresses), and what vibes says. Beside the tree, the show (server/show.ts,
+ * server/show-scenes.ts): its clock, which runs on between words, so it's
+ * said where it is as it changes rather than kept in the tree; its scenes;
+ * and a scene fired, which is an action, not a value, answered as an update
+ * is (done or refused).
+ */
 export type RoomRequest =
   | { type: "auth"; token: string }
   /** Ready for the tree: from scratch (null), or what's changed since `rev` (of vibes' run `epoch`, as the tree it had said). */
   | { type: "hello"; rev: number | null; epoch?: string }
   /** Changes, all or none; `note` says what for, for the history (a room tone choice's name). */
-  | { type: "update"; id: string; ops: Op[]; note?: string };
+  | { type: "update"; id: string; ops: Op[]; note?: string }
+  /** The show clock started, stopped, moved, or given a tempo. */
+  | ({ type: "clock" } & ClockPatch)
+  /** A show scene made or changed. */
+  | ({ type: "scene" } & ScenePatch)
+  /** A show scene fired; `cut`, at once whatever the cue mode (a momentary one, held, and let go). */
+  | { type: "fire"; id: string; scene: string; cut?: boolean };
 
 export type RoomMessage =
   /** The whole tree, as of change `rev` of this run of vibes (`epoch`: its changes count from 0 again when it starts again). */
@@ -195,4 +208,8 @@ export type RoomMessage =
   | { type: "done"; id: string; made: Record<string, ShaderKey> }
   /** An update not made (all of it, or, failing part way in arclamp, the rest of it), and why. */
   | { type: "refused"; id: string; error: string; code: string; made: Record<string, ShaderKey> }
-  | { type: "ping" };
+  | { type: "ping" }
+  /** The show clock, where it is now: as it's set, and once it's been, on hello. */
+  | { type: "clock"; clock: ShowClock }
+  /** The show's scenes: on hello, and as they change. */
+  | { type: "scenes"; scenes: ShowScenes };

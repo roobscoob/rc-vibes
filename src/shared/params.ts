@@ -8,16 +8,21 @@
 import type { LightInfo } from "./arclamp.ts";
 import { isBinary } from "./fixtures.ts";
 import { LUMENS_PER_BRIGHTNESS, type Lemtone } from "./lemtone.ts";
-import { cleanValue, groupsOf, passes, valuesOf, type ColorValue, type Groups, type LightFacts, type LightKind, type ParamSpec, type ParamTable, type ParamValue } from "../../packages/vibes/src/wire.ts";
+import { cleanValue, clockAt, groupsOf, passes, valuesOf, type ColorValue, type Groups, type HeardClock, type LightFacts, type LightKind, type ParamSpec, type ParamTable, type ParamValue } from "../../packages/vibes/src/wire.ts";
 
 export {
+  BEATS_PER_BAR,
   checkSpec,
   cleanValue,
+  clockAt,
+  clockValue,
   colorValue,
   filterOf,
   groupsOf,
   LIGHT_KINDS,
+  MAX_BPM,
   MAX_PARAMS,
+  MIN_BPM,
   PARAM_NAME,
   passes,
   PROTOCOL,
@@ -30,6 +35,7 @@ export {
   type ColorValue,
   type EndEvent,
   type Groups,
+  type HeardClock,
   type Hello,
   type LightFacts,
   type LightFilter,
@@ -39,9 +45,47 @@ export {
   type ParamSpec,
   type ParamTable,
   type ParamValue,
+  type ShowClock,
   type StateEvent,
   type ToggleSpec,
 } from "../../packages/vibes/src/wire.ts";
+
+/** A change to the show clock: started or stopped, moved to a time (in seconds), and (or) its tempo set: beats a minute, and the beat it's on now. */
+export interface ClockPatch {
+  playing?: boolean;
+  t?: number;
+  bpm?: number;
+  beat?: number;
+}
+
+/** The show clock as of `now` (ms) with a change made to it (one never set is at 0, stopped, with no tempo). */
+export function withClockPatch(heard: HeardClock | null, patch: ClockPatch, now: number): HeardClock {
+  const was = clockAt(heard, now) ?? { playing: false, t: 0 };
+  const is: HeardClock = { playing: patch.playing ?? was.playing, t: Math.max(0, patch.t ?? was.t), at: now };
+  const bpm = patch.bpm ?? was.bpm;
+  if (bpm !== undefined) {
+    is.bpm = bpm;
+    is.beat = Math.max(0, patch.beat ?? was.beat ?? 0);
+  }
+  return is;
+}
+
+/** A time on the show clock as the transport shows it: m:ss (h:mm:ss past an hour). */
+export function clockText(t: number): string {
+  const whole = Math.max(0, Math.floor(t));
+  const s = whole % 60;
+  const m = Math.floor(whole / 60) % 60;
+  const h = Math.floor(whole / 3600);
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  return `${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
+}
+
+/** A time typed into the transport, in seconds: m:ss, h:mm:ss, or just seconds; null if it isn't one. */
+export function parseClockText(text: string): number | null {
+  const parts = text.trim().split(":");
+  if (parts.length === 0 || parts.length > 3 || parts.some((p) => !/^\d+(\.\d+)?$/.test(p))) return null;
+  return parts.reduce((acc, p) => acc * 60 + Number(p), 0);
+}
 
 /** A shader's params, as a page shows them: what its sketch says it declares (null until something running it has), and its values. */
 export interface ShaderParams {

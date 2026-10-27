@@ -296,6 +296,37 @@ streams it each value as it changes; nothing is needed in the sketch beyond
 the declaration. A param you rename or delete goes from the editor's knobs as
 you save, though the preview carries on without reloading.
 
+## The show clock
+
+One clock for the room, run from vibes (play, stop, and set to a time), so
+every sketch that follows it agrees where the piece is, and any part of it
+can be rehearsed. `show.time` is a field of where the piece is, in seconds;
+`show.playing`, whether it's running. A piece is then sections by time:
+
+```ts
+import { show, sketch } from "@roobscoob/vibes";
+
+const t = show.time;
+
+export const update = sketch((here) => (t(here) < 40 ? intro(here) : t(here) < 95 ? verse(here) : chorus(here)));
+```
+
+Before vibes has said anything, it's 0 and stopped. It comes the way params'
+values do, and runs on smoothly between words from vibes. The preview has the
+same clock, its own, with a transport over the map.
+
+The clock has a tempo too, once someone sets one in vibes (tapped, typed, or
+from a MIDI clock): `show.beat` counts beats, smoothly (2.5 is halfway through
+the third), `show.bar` counts bars of 4, and `show.bpm` is the tempo. The beat
+runs on whether the piece is playing or not. With no tempo set they're 0.
+
+```ts
+const beat = show.beat;
+
+// A flash on every beat, fading out before the next.
+export const update = sketch((here) => color.hsl(30, 1, 1 - (beat(here) % 1)));
+```
+
 ## Without sketch()
 
 `sketch()` makes arclamp's `update(prev, nowMs, initialMs)`, which you can

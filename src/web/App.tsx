@@ -9,6 +9,7 @@ import { ColorPreview } from "./components/ColorPreview.tsx";
 import { Login } from "./components/Login.tsx";
 import { Pending } from "./components/Pending.tsx";
 import { RoomMap, type SelectMode } from "./components/RoomMap.tsx";
+import { ShowDock } from "./components/ShowDock.tsx";
 import { SelectionPanel } from "./components/SelectionPanel.tsx";
 import { TagChips } from "./components/TagChips.tsx";
 import { UserMenu } from "./components/UserMenu.tsx";
@@ -16,7 +17,8 @@ import { FLOORS } from "./floors.ts";
 import { useLiveStream } from "./live.ts";
 import { useNarrow } from "./narrow.ts";
 import { usePeek } from "./peek.ts";
-import { savedFloor, saveFloor, useLiveMode } from "./settings.ts";
+import { savedFloor, saveFloor, useLiveMode, useShowMode } from "./settings.ts";
+import { setClock, useClock } from "./show.ts";
 import { useSimulation } from "./sim.ts";
 import { navigate, usePath, useQueryParam } from "./route.ts";
 import { SplitHandle, StreetView } from "./components/StreetView.tsx";
@@ -62,6 +64,7 @@ function Shell() {
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [floor, setFloor] = useState<number>(initialFloor);
   const all = useMemo(() => lights.data?.lights ?? [], [lights.data]);
+  const allIds = useMemo(() => all.map((l) => l.id), [all]);
 
   // Pending edits put vibes in simulated mode: the map shows the preview of
   // them until they're applied or discarded. So does peeking at the room
@@ -76,6 +79,7 @@ function Shell() {
   const pending = scene.data ? pendingCount(live, draft) : 0;
   const peeking = usePeek();
   const liveMode = useLiveMode();
+  const showMode = useShowMode();
   const [liveError, setLiveError] = useState<string | null>(null);
   // The draft last sent: sent again once it's changed.
   const lastSent = useRef<Draft | null>(null);
@@ -95,11 +99,24 @@ function Shell() {
   }, [liveMode]);
   const previewing = pending > 0 && (!liveMode || liveError !== null);
   const simulated = previewing || peeking;
+  // The show clock, for the preview's sketches to follow as the room's do.
+  const clock = useClock();
+  // The show (its clock and scenes), docked along the map's bottom: the map keeps clear of it (--dock-h).
+  // And the map fits itself to what's left as the dock comes, goes, opens and folds (once its height settles).
+  const dockWas = useRef(0);
+  const dockSettle = useRef<number | undefined>(undefined);
+  const dockHeight = useCallback((px: number) => {
+    app.current?.style.setProperty("--dock-h", px > 0 ? `calc(${px}px + var(--gap))` : "0px");
+    if (Math.abs(px - dockWas.current) < 8) return;
+    dockWas.current = px;
+    window.clearTimeout(dockSettle.current);
+    dockSettle.current = window.setTimeout(() => setFraming((n) => n + 1), 120);
+  }, []);
   const simInputs = useMemo(() => {
     // Each is previewed once its script's here: a sketch being added, once it's built.
     const layers = layersOf(live, draft).filter((l) => l.script !== "");
-    return { lights: all, layers: peeking ? layers.map((l) => ({ ...l, muted: true })) : layers, template: templateOf(live, draft) };
-  }, [all, live, draft, peeking]);
+    return { lights: all, layers: peeking ? layers.map((l) => ({ ...l, muted: true })) : layers, template: templateOf(live, draft), clock };
+  }, [all, live, draft, peeking, clock]);
   // Their builds, asked for and watched.
   useAddingBuilds();
   useSimulation(simulated, simInputs);
@@ -255,6 +272,7 @@ function Shell() {
           }}
         />
       )}
+      {showMode && <ShowDock live={live} lights={all} home={selectedHere.size > 0 ? [...selectedHere] : allIds} clock={clock} onClock={setClock} onHeight={dockHeight} />}
       <div className="hud" ref={hud}>
         <Banners />
         <div className="hud-bar" ref={bar}>

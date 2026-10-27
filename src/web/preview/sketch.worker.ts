@@ -11,9 +11,10 @@
 // updated (the box's Vite has the entry accept its updates, and hand them
 // here as __vibesNext).
 //
-// Its params are the panel's: what the sketch declares is told after each
-// load or update, and the knobs' values are handed to the library as vibes'
-// stream hands them over in the room (__vibes.apply; packages/vibes/src/param.ts).
+// Its params are the panel's: what the sketch declares (and whether it reads
+// the show clock) is told after each load or update, and the knobs' values,
+// and the panel's clock, are handed to the library as vibes' stream hands
+// them over in the room (__vibes.apply; packages/vibes/src/param.ts).
 // A module updated in place runs again, and declares what it declares now:
 // the library's told which modules are to run again before an update
 // (retire), and that they have after it (settle), so a param one no longer
@@ -21,7 +22,7 @@
 
 import { ESModulesEvaluator, ModuleRunner } from "vite/module-runner";
 import type { VibesHost } from "../../../packages/vibes/src/param.ts";
-import type { ParamSpec, ParamTable } from "../../shared/params.ts";
+import type { ParamSpec, ParamTable, ShowClock } from "../../shared/params.ts";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope & Record<string, unknown>;
 
@@ -42,18 +43,21 @@ export type ToSketch =
   | { type: "hmr"; payload: Payload }
   | { type: "tick"; seq: number; prev: unknown; now: number; initial: number }
   /** Its params' values, all of them, as vibes' stream sends them in the room. */
-  | { type: "params"; values: ParamTable };
+  | { type: "params"; values: ParamTable }
+  /** The show clock, where it is now, as vibes' stream sends it. */
+  | { type: "clock"; clock: ShowClock };
 export type FromSketch =
   | { type: "loaded" }
-  /** What the sketch declares as params, after each load or update. */
-  | { type: "params"; specs: ParamSpec[] }
+  /** What the sketch declares as params, and whether it reads the show clock, after each load or update. */
+  | { type: "params"; specs: ParamSpec[]; clock: boolean }
   | { type: "out"; seq: number; out: unknown }
   | { type: "log"; level: "log" | "warn" | "error"; text: string }
   | { type: "hmr"; payload: unknown }
   | { type: "error"; seq?: number; message: string };
 
 const reply = (m: FromSketch) => scope.postMessage(m);
-const tellParams = () => reply({ type: "params", specs: declared() });
+// An older library (one with params but no show clock) can't say whether the sketch reads it.
+const tellParams = () => reply({ type: "params", specs: declared(), clock: host()?.show?.() ?? false });
 
 const show = (v: unknown) => {
   if (typeof v === "string") return v;
@@ -138,6 +142,10 @@ scope.onmessage = (e: MessageEvent<ToSketch>) => {
   const m = e.data;
   if (m.type === "params") {
     host()?.apply("state", { v: 1, values: m.values });
+    return;
+  }
+  if (m.type === "clock") {
+    host()?.apply("clock", m.clock);
     return;
   }
   if (m.type === "load") {
