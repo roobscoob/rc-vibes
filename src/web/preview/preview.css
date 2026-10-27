@@ -85,3 +85,7 @@ body {
   height: 24px;
   margin: -12px 0 0 -12px;
 }
+
+.preview-knobs .transport {
+  width: fit-content;
+}

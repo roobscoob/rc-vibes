@@ -36,6 +36,8 @@ function flag(key: string) {
 
 export const [setAdminMode, useAdminMode] = flag("vibes.adminMode");
 export const [setLiveMode, useLiveMode] = flag("vibes.liveMode");
+// Show mode: the show's dock along the bottom of the map (its clock, tempo and scenes).
+export const [setShowMode, useShowMode] = flag("vibes.showMode");
 // The map's light worked out a pixel at a time (lighting-exact.ts), while it's tried out.
 export const [setExactLight, useExactLight] = flag("vibes.exactLight");
 

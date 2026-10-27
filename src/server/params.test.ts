@@ -6,6 +6,7 @@ import { ArclampError } from "./arclamp.ts";
 import { openDb, type Db } from "./db.ts";
 import { createParamLinks, declarationsOf, linkOfToken, linkToken, type ParamLinks, type SeenShader } from "./params.ts";
 import { createPools, type Pools } from "./pools.ts";
+import { createShowClock } from "./show.ts";
 
 const SECRET = "s".repeat(32);
 const speed: ParamSpec = { kind: "number", name: "speed", label: "Speed", lights: {}, default: 7, min: 0, max: 20, step: 0.1 };
@@ -185,6 +186,38 @@ describe("linking shaders to their pools, and the pools' streams", () => {
     links.scene([shader({ pool: "gone" })]);
     await settle();
     expect(evals).toEqual([]);
+  });
+
+  it("sends the show clock once it's set: as it changes, and on open, after every value", async () => {
+    const show = createShowClock(() => clock);
+    const withShow = createParamLinks({ pools, arclamp: { evalShader: answer }, secret: SECRET, url: "https://vibes.test/shader-api/params", show, now: () => clock });
+    const connectTo = (token: string) =>
+      withShow.routes().request("/shader-api/params", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ v: 1, params: [speed] }) });
+    try {
+      const link = pools.relink("p");
+      const next = events(await connectTo(linkToken(SECRET, "p", link)));
+      expect(await next()).toEqual({ event: "state", data: { v: 1, values: {} } });
+      clock = 50_000;
+      show.set({ playing: true, t: 12 });
+      expect(await next()).toEqual({ event: "clock", data: { t: 12, playing: true } });
+      // A stream opened later hears where it is now.
+      clock = 52_000;
+      const more = events(await connectTo(linkToken(SECRET, "p", link)));
+      expect(await next()).toEqual({ event: "end", data: { reason: "replaced" } });
+      expect(await more()).toEqual({ event: "state", data: { v: 1, values: {} } });
+      expect(await more()).toEqual({ event: "clock", data: { t: 14, playing: true } });
+    } finally {
+      withShow.stop();
+    }
+  });
+
+  it("says how much of a pool's sketch shows, down its stream, if it has one", async () => {
+    expect(links.level("p", 0, 300)).toBe(false);
+    const next = events(await connect(linkToken(SECRET, "p", pools.relink("p"))));
+    expect((await next())!.event).toBe("state");
+    expect(links.linked("p")).toBe(true);
+    expect(links.level("p", 0, 300)).toBe(true);
+    expect(await next()).toEqual({ event: "level", data: { to: 0, ms: 300 } });
   });
 
   it("turns down a stream without the pool's last link's token, or in another protocol", async () => {

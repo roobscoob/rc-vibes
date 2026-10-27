@@ -1,6 +1,7 @@
 // Types for vibes' own API (/api/*), shared by the server and the browser.
 
 import type { Coords, LightsResponse, RailSpot, RoomTemplate, ShaderState } from "./arclamp.ts";
+import type { ParamValue } from "./params.ts";
 import type { RailShape } from "./rails.ts";
 
 export interface Person {
@@ -106,6 +107,50 @@ export interface Instance {
 export interface SceneFeed {
   shaders: Shader[];
   roomtone: RoomTemplate | null;
+}
+
+/** How a scene fired comes in, for everyone: at once; at once on the next bar's first beat (with a tempo); or blended in over a beat. */
+export type CueMode = "cut" | "downbeat" | "fade";
+
+/** A shader's knobs as a scene keeps them: each param's values, by light id (as its pool has them: only lights not at the default). */
+export type SceneKnobs = Record<string, Record<string, ParamValue>>;
+
+/**
+ * A scene of the show (ShowScene) made or changed: a new one, empty; a
+ * shader in the room loaded into it (with its knobs as they are now), in
+ * place of what it had, or taken out; its shader's knobs taken from the room
+ * again; renamed; taken out of the show; or a knob's values in it changed
+ * (each light's; null, back to the default). Or how scenes fired come in.
+ */
+export type ScenePatch =
+  | { op: "mode"; to: CueMode }
+  | { op: "param"; scene: string; key: ShaderKey; name: string; set: [light: number, value: ParamValue | null][] }
+  | { op: "create" }
+  | { op: "load"; scene: string; key: ShaderKey }
+  | { op: "unload"; scene: string; key: ShaderKey }
+  | { op: "knobs"; scene: string }
+  | { op: "rename"; scene: string; name: string }
+  | { op: "remove"; scene: string };
+
+/**
+ * A scene of the show: the shaders it has on, by key (one, for now), each
+ * with its knobs as it was loaded (null: as they are). Fired, those are
+ * switched on with those knobs, and every other shader in the stack off.
+ */
+export interface ShowScene {
+  id: string;
+  name: string;
+  shaders: Record<ShaderKey, SceneKnobs | null>;
+  by: Person;
+  at: number;
+}
+
+/** The show's scenes, in order; the one fired last (null: none yet, or it's gone), and one fired that's waiting for its downbeat; and how they come in. */
+export interface ShowScenes {
+  scenes: ShowScene[];
+  fired: string | null;
+  queued: string | null;
+  mode: CueMode;
 }
 
 /** What a browser says first over the light stream (/api/stream), on a socket to vibes at another address than the page's. */
@@ -256,6 +301,10 @@ export type ActivityAction =
   | "shader.home"
   | "shader.param"
   | "roomtone.set"
+  | "show.clock"
+  | "show.scene"
+  | "show.unscene"
+  | "show.fire"
   | "scene.clear"
   | "lights.move"
   | "lights.turn"

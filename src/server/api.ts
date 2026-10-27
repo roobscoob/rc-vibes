@@ -1,6 +1,7 @@
 // /api: everything the browser can do. Each route checks the session,
 // forwards to arclamp with vibes' key, and records who did it.
 
+import { randomUUID } from "node:crypto";
 import { upgradeWebSocket } from "@hono/node-server";
 import { zValidator } from "@hono/zod-validator";
 import { Hono, type Context, type ErrorHandler } from "hono";
@@ -9,7 +10,9 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { normalizeLights, type Channels, type LightsResponse } from "../shared/arclamp.ts";
-import type { RoomMessage } from "../shared/live.ts";
+import type { Op, RoomMessage } from "../shared/live.ts";
+import { MAX_BPM, MIN_BPM, PARAM_NAME } from "../shared/params.ts";
+import { cueOf } from "../shared/show-scenes.ts";
 import { RAIL_ID } from "../shared/rails.ts";
 import { MAX_TAGS, TAG } from "../shared/tags.ts";
 import type { Lights, Me, Status } from "../shared/vibes.ts";
@@ -24,6 +27,8 @@ import { applyEdits, lightsFile } from "./lights.ts";
 import type { LiveState } from "./live.ts";
 import type { Pools } from "./pools.ts";
 import type { SceneFeedSource } from "./scene-feed.ts";
+import type { ShowClockSource } from "./show.ts";
+import type { Room, ShowScenesSource } from "./show-scenes.ts";
 import { createShaders, Refused, shaderRoutes } from "./shaders.ts";
 import type { StreamRelay } from "./stream.ts";
 import { streetviewPublicFiles, streetviewRoutes } from "./streetview.ts";
@@ -56,6 +61,10 @@ export interface ApiDeps {
   instances?: Instances | null;
   /** arclamp's health, followed (without it, it's asked for each time). */
   health?: HealthWatch | null;
+  /** The show clock, set from any page and told to all (and to sketches, over their streams). */
+  show?: ShowClockSource | null;
+  /** The show's scenes, changed and fired from any page and told to all. */
+  scenes?: ShowScenesSource | null;
 }
 
 // An event stream says something at least this often (a ping, if nothing
@@ -67,9 +76,40 @@ const op = z.union([z.tuple([z.string().max(300)]), z.tuple([z.string().max(300)
 const roomRequest = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hello"), rev: z.number().int().nullable(), epoch: z.string().max(100).optional() }),
   z.object({ type: z.literal("update"), id: z.string().min(1).max(100), ops: z.array(op).max(MAX_OPS), note: z.string().max(60).optional() }),
+  // The show clock set (at most 100 hours in), and its tempo.
+  z.object({
+    type: z.literal("clock"),
+    playing: z.boolean().optional(),
+    t: z.number().finite().min(0).max(360_000).optional(),
+    bpm: z.number().finite().min(MIN_BPM).max(MAX_BPM).optional(),
+    beat: z.number().finite().min(0).max(1e8).optional(),
+  }),
+  // A show scene fired.
+  z.object({ type: z.literal("fire"), id: z.string().min(1).max(100), scene: z.string().min(1).max(100), cut: z.boolean().optional() }),
   // A page from before the live state, asking the old way.
   z.object({ type: z.literal("apply"), id: z.string().max(100) }).passthrough(),
 ]);
+// A show scene made or changed (ScenePatch).
+const sceneId = z.string().min(1).max(100);
+const sceneShader = z.string().min(1).max(100);
+const sceneRequest = z.object({ type: z.literal("scene") }).and(
+  z.discriminatedUnion("op", [
+    z.object({ op: z.literal("mode"), to: z.enum(["cut", "downbeat", "fade"]) }),
+    z.object({
+      op: z.literal("param"),
+      scene: sceneId,
+      key: sceneShader,
+      name: z.string().regex(PARAM_NAME),
+      set: z.array(z.tuple([z.number().int().positive(), z.unknown()])).max(2000),
+    }),
+    z.object({ op: z.literal("create") }),
+    z.object({ op: z.literal("load"), scene: sceneId, key: sceneShader }),
+    z.object({ op: z.literal("unload"), scene: sceneId, key: sceneShader }),
+    z.object({ op: z.literal("knobs"), scene: sceneId }),
+    z.object({ op: z.literal("rename"), scene: sceneId, name: z.string().trim().min(1).max(60) }),
+    z.object({ op: z.literal("remove"), scene: sceneId }),
+  ]),
+);
 // The sockets, which a page at another of vibes' addresses opens without a cookie, saying who's there first.
 const SOCKETS = new Set(["/api/scene/ws", "/api/stream"]);
 // How long a socket without a cookie has to say who's there.
@@ -160,7 +200,7 @@ const badBody = (result: { success: boolean; error?: unknown }, c: Context) => {
   }
 };
 
-export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, live, pools, layout, sketches, instances = null, health = null }: ApiDeps) {
+export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, live, pools, layout, sketches, instances = null, health = null, show = null, scenes = null }: ApiDeps) {
   const api = new Hono<AuthEnv>();
   api.onError(handleError);
   // Browsers already refuse cross-site JSON requests without CORS headers,
@@ -248,6 +288,32 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
     },
   });
 
+  // The show: its clock and scenes, told to every page that's said hello, as they change.
+  const heard = new Set<(message: string) => void>();
+  show?.subscribe((clock) => {
+    const message = JSON.stringify({ type: "clock", clock } satisfies RoomMessage);
+    for (const say of heard) say(message);
+  });
+  scenes?.subscribe((now) => {
+    const message = JSON.stringify({ type: "scenes", scenes: now } satisfies RoomMessage);
+    for (const say of heard) say(message);
+  });
+  // The room as the live state has it now: its shaders, top first, and their pools.
+  const room = (): Room => {
+    const tree = live.tree();
+    return { shaders: tree.stack.flatMap((k) => (tree.shaders[k] ? [tree.shaders[k]] : [])), pools: tree.pools };
+  };
+  // Changes a scene fired makes, as `user`: an update, as a page's would be, answered once the tree shows it.
+  const makeAs = (user: Me) => (ops: Op[]) =>
+    new Promise<Record<string, string>>((resolve, reject) => {
+      const session = updates.session(user, (m) => {
+        session.close();
+        if (m.type === "done") resolve(m.made);
+        else if (m.type === "refused") reject(new Error(m.error));
+      });
+      session.take(randomUUID(), ops);
+    });
+
   return api
     .get("/me", (c) => c.json(c.get("user")))
 
@@ -331,14 +397,18 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
     // and the page's updates, each answered once the tree shows it
     // (updates.ts). A page sends the next without waiting: in live mode, its
     // latest changes each time they change, so the room keeps up with a drag.
-    // Its origin is checked as every request's is (above): a socket isn't
-    // held to the same-origin rule.
+    // Beside the tree, the show: its clock and scenes (from hello on, as they
+    // change), set from here; and a scene fired, made as updates as the cue
+    // mode says (show-scenes.ts), answered as an update is. Its origin is
+    // checked as every request's is (above): a socket isn't held to the
+    // same-origin rule.
     .get(
       "/scene/ws",
       upgradeWebSocket((c) => {
         const cookie = (c.get("user") as Me | null) ?? null;
         let on: ReturnType<typeof whoIsOn> | null = null;
         let session: ReturnType<typeof updates.session> | null = null;
+        let user: Me | null = null;
         let closed = false;
         let say = (_message: string) => {};
         let unsubscribe = () => {};
@@ -351,6 +421,7 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
               if (!closed) ws.send(message);
             };
             on = whoIsOn(cookie, config, ws, (u) => {
+              user = u;
               session = updates.session(u, answer);
             });
             ping = setInterval(() => say('{"type":"ping"}'), STREAM_PING_MS);
@@ -360,10 +431,19 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
             // Who's there, first (from another of vibes' addresses).
             if (on?.take(text) === null || !session) return;
             let asked: ReturnType<typeof roomRequest.safeParse> | null = null;
+            let json: unknown;
             try {
-              asked = roomRequest.safeParse(JSON.parse(text));
+              json = JSON.parse(text);
+              asked = roomRequest.safeParse(json);
             } catch {
               // Not JSON: refused below.
+            }
+            // A show scene made or changed.
+            const scene = asked?.success ? null : sceneRequest.safeParse(json);
+            if (scene?.success) {
+              const { type: _, ...patch } = scene.data;
+              scenes?.change(patch as Parameters<ShowScenesSource["change"]>[0], room(), user!);
+              return;
             }
             if (!asked?.success) {
               answer({ type: "refused", id: "", error: "invalid request", code: "bad_body", made: {} });
@@ -377,8 +457,33 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
               if (missed) for (const d of missed) say(d);
               else say(live.state());
               unsubscribe = live.subscribe(say);
+              // And the show.
+              heard.add(say);
+              const clock = show?.current();
+              if (clock) answer({ type: "clock", clock });
+              if (scenes) answer({ type: "scenes", scenes: scenes.current() });
             } else if (m.type === "update") {
               session.take(m.id, m.ops, m.note);
+            } else if (m.type === "clock") {
+              const { type: _, ...patch } = m;
+              if (Object.values(patch).every((v) => v === undefined)) return;
+              const clock = show?.set(patch);
+              // In the history: started, stopped, moved, and its tempo set (a run of moves, or of taps, from one person as one entry).
+              const bpm = clock?.bpm === undefined ? {} : { bpm: Math.round(clock.bpm * 10) / 10 };
+              if (clock)
+                db.logCoalesced({ user: user!, action: "show.clock", detail: { playing: clock.playing, t: Math.round(clock.t * 10) / 10, ...bpm } }, ROOMTONE_LOG_WINDOW_MS, (last) => last?.playing === clock.playing);
+            } else if (m.type === "fire") {
+              // As the cue mode says: at once, on the next downbeat, or blended. Made whether or not this page is still here by then.
+              const who = user!;
+              const { wait, blend } = m.cut || !scenes ? { wait: 0, blend: 0 } : cueOf(scenes.mode(), show?.current() ?? null);
+              const go = () => {
+                void scenes
+                  ?.land(m.scene, room(), who, blend, makeAs(who))
+                  .then((made) => answer(made ? { type: "done", id: m.id, made } : { type: "refused", id: m.id, error: "no such scene", code: "not_found", made: {} }))
+                  .catch((err: unknown) => answer({ type: "refused", id: m.id, error: (err as Error).message, code: "refused", made: {} }));
+              };
+              const dropped = () => answer({ type: "refused", id: m.id, error: "another scene was fired before it landed", code: "replaced", made: {} });
+              if (!scenes?.queue(m.scene, wait, go, dropped)) answer({ type: "refused", id: m.id, error: "no such scene", code: "not_found", made: {} });
             } else {
               // A page from before: it says why its changes don't go through.
               say(JSON.stringify({ type: "refused", id: m.id, at: 0, error: "vibes has changed since this page loaded: reload it", code: "reload", made: {} }));
@@ -386,6 +491,7 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
           },
           onClose() {
             closed = true;
+            heard.delete(say);
             on?.done();
             unsubscribe();
             session?.close();

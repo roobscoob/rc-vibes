@@ -567,10 +567,53 @@ color lights only. The rules on both ends are the library's
   it shows them before they're applied, and live mode applies them as they
   move. The editor's Sketch panel has knobs of its own, for every light: they
   change its preview at once, and its pool after.
+- **The show clock.** One for the room, in vibes' memory (`src/server/show.ts`):
+  where the piece is, and whether it's running. The transport in the HUD
+  starts, stops and sets it (`clock` over the room socket, beside the live
+  tree, as it runs on between words); vibes tells
+  every browser where it is now, and every linked shader on its stream
+  (`clock`), as it changes and on each stream's open. In the library,
+  `show.time` and `show.playing` are fields, run on smoothly between words
+  from vibes at the frame's clock. A piece is sections by time, so cues are
+  lines in the sketch. The preview page has a clock of its own, to rehearse
+  any part. Each start, stop and move is in the history (`show.clock`, a
+  run of moves from one person as one entry); the clock itself isn't
+  written: a vibes that starts over starts it at 0, stopped.
+
+- **The show's scenes** (`src/server/show-scenes.ts`). A scene starts
+  empty and has a shader loaded into it, with its knobs (its pool's values)
+  as they were then; a sketch from the library is put in the room first,
+  switched off, so it's built before the scene's fired. Kept in vibes'
+  database and told to every page over the room socket, beside the live
+  tree. Fired (a button, a number key, or a MIDI controller's pads), it's
+  made as updates from the live state as it is then, as a page's would be:
+  its knobs, then everything else off and its shaders on. Out of live mode,
+  firing previews it as pending edits instead, until Apply. Which was fired
+  last is in memory only.
+- **The tempo** (on the show clock: `bpm`, and the beat it's on, running
+  whether the piece plays or not). Tapped, typed, or followed from a MIDI
+  clock in the show's dock, beside the transport, and Sync makes now the
+  downbeat; sketches read `show.beat`, `show.bar` and `show.bpm`.
+- **Cue modes** (one for the room): Cut, at once; Downbeat, at once on the
+  next bar's first beat (one fired meanwhile stands in for one waiting); or
+  Fade, over a beat. A fade is a level per sketch, down its stream (`level`),
+  mixed over the layers below by `sketch()`; sketches without it cut. Held
+  with Shift, a scene is momentary, back to the one before when let go; in
+  live mode the number keys fire scenes.
+- **The show's dock** (`ShowDock.tsx`), along the bottom of the map in show
+  mode (the account menu): folded, one bar (transport, tempo, a button per
+  scene); opened, the cue list, a row a scene (its sketch and section,
+  clicked to pick another, from the room or the library), and the picked
+  scene's knobs beside it, kept in the scene (and turned in the room for the
+  one fired), with a link to its code. A scene is one sketch for now, on its
+  section (its home); loading one puts it in place of the last. The map fits
+  itself to what's left as the dock comes and goes.
 
 Still to come: a shader that drops some of what it declares (or won't say)
-only says so in vibes' log, not in the panel; and a page to turn a box
-preview's knobs from elsewhere (a phone), which its pool already allows.
+only says so in vibes' log, not in the panel; a page to turn a box
+preview's knobs from elsewhere (a phone), which its pool already allows;
+scenes cued by time; a master dimmer over the stack; a sketch's code edited
+live in the dock.
 
 ## Gaps in arclamp (PRs to rclamp)
 

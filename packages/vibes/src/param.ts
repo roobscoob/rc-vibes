@@ -19,7 +19,8 @@
 // __vibes.connect), and the library opens a stream to vibes, saying what's
 // declared, and takes each change as it comes (wire.ts has the protocol). The
 // link and the values are kept on globalThis, so a new script in the same
-// sandbox carries on from them; the declarations are the script's own.
+// sandbox carries on from them; the declarations are the script's own. The
+// show clock (show.ts) comes on the same stream, and is kept the same way.
 //
 // The preview and the map's simulation have no stream: they hand values in
 // with __vibes.apply(), the same events the stream carries, and ask what's
@@ -32,6 +33,8 @@ import { field, type Field } from "./field.ts";
 import type { Here } from "./here.ts";
 import {
   checkSpec,
+  clockValue,
+  levelValue,
   passes,
   PROTOCOL,
   valuesOf,
@@ -39,6 +42,7 @@ import {
   type ChangeEvent,
   type Changes,
   type ColorValue,
+  type HeardClock,
   type ParamSpec,
   type ParamTable,
   type StateEvent,
@@ -88,15 +92,19 @@ const LASTED_MS = 30_000;
 const QUIET_MS = 45_000;
 
 /**
- * What outlives a script in its sandbox: the values, the link, and the
- * stream: the one open now, which start of one that was (each counts up),
- * the next try at one (and whose), how long that waits, and whether another
- * stream took over. The stream's kept here, not in a script's own module, so
- * a new script's stream and anything an old one left behind can't both carry
- * on: only the newest script's library (owner) opens one.
+ * What outlives a script in its sandbox: the values, the show clock, the
+ * link, and the stream: the one open now, which start of one that was (each
+ * counts up), the next try at one (and whose), how long that waits, and
+ * whether another stream took over. The stream's kept here, not in a
+ * script's own module, so a new script's stream and anything an old one left
+ * behind can't both carry on: only the newest script's library (owner) opens
+ * one.
  */
 interface Kept {
   values: ParamTable;
+  clock: HeardClock | null;
+  /** How much of the sketch shows: from `from` at `at` (ms) to `to`, `ms` later (null: all of it). */
+  level: { from: number; to: number; at: number; ms: number } | null;
   link: Link | null;
   owner: unknown;
   stream: { abort(): void } | null;
@@ -113,9 +121,11 @@ function kept(): Kept {
   const g = globalThis as Record<string, unknown>;
   let k = g[KEPT] as Kept | undefined;
   if (!k || typeof k !== "object" || typeof k.values !== "object" || k.values === null) {
-    g[KEPT] = k = { values: {}, link: null, owner: null, stream: null, started: 0, retry: null, retryBy: null, wait: FIRST_WAIT_MS, halted: false };
+    g[KEPT] = k = { values: {}, clock: null, level: null, link: null, owner: null, stream: null, started: 0, retry: null, retryBy: null, wait: FIRST_WAIT_MS, halted: false };
   }
   // Kept by an older library: what it didn't keep.
+  k.clock ??= null;
+  k.level ??= null;
   k.started ??= 0;
   k.retry ??= null;
   k.wait ??= FIRST_WAIT_MS;
@@ -219,6 +229,8 @@ function apply(event: string, data: unknown): boolean {
     const values = (data as Partial<StateEvent> | null)?.values;
     if (!values || typeof values !== "object") return false;
     k.values = { ...values };
+    // A stream (again): all of the sketch, till vibes says otherwise.
+    k.level = null;
     return true;
   }
   if (event === "change") {
@@ -228,7 +240,39 @@ function apply(event: string, data: unknown): boolean {
     k.values = { ...k.values, [spec.name]: withChanges(spec, k.values[spec.name], d!.set as Changes) };
     return true;
   }
+  if (event === "clock") {
+    const c = clockValue(data);
+    if (!c) return false;
+    k.clock = { ...c, at: Date.now() };
+    return true;
+  }
+  if (event === "level") {
+    const l = levelValue(data);
+    if (!l) return false;
+    const now = Date.now();
+    k.level = { from: levelAt(now), to: l.to, at: now, ms: l.ms };
+    return true;
+  }
   return false;
+}
+
+/** How much of the sketch shows over what's below at `now` (ms), 0 to 1 (sketch() mixes by it): all of it till vibes says otherwise. */
+export function levelAt(now: number): number {
+  const l = kept().level;
+  if (!l) return 1;
+  if (l.ms <= 0 || now >= l.at + l.ms) return l.to;
+  const k = Math.max(0, (now - l.at) / l.ms);
+  // Eased, so it starts and settles gently.
+  return l.from + (l.to - l.from) * (k * k * (3 - 2 * k));
+}
+
+/** The show clock as last heard (show.ts reads it); null before vibes has said. */
+export const heardClock = (): HeardClock | null => kept().clock;
+
+// Whether this script reads the show clock (show.time or show.playing): the preview shows a transport if so.
+let wantsShow = false;
+export function wantShow(): void {
+  wantsShow = true;
 }
 
 // This script: whether its stream is open, and whether it's to open soon.
@@ -402,6 +446,8 @@ export interface VibesHost {
   /** Since 0.3.1 (a preview's hot reloads); an older library has neither. */
   retire?(paths: readonly string[] | "*"): void;
   settle?(): void;
+  /** Since 0.4.0: whether the script reads the show clock (the preview then has a transport). */
+  show?(): boolean;
 }
 
 // This script is the sandbox's newest: its library's the one to keep the stream.
@@ -414,4 +460,5 @@ kept().owner = me;
   params: () => [...declared.values()],
   retire,
   settle,
+  show: () => wantsShow,
 } satisfies VibesHost;

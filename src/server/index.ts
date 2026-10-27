@@ -22,6 +22,8 @@ import { createLiveState } from "./live.ts";
 import { createParamLinks } from "./params.ts";
 import { createPools } from "./pools.ts";
 import { createSceneFeed } from "./scene-feed.ts";
+import { createShowClock } from "./show.ts";
+import { createShowScenes } from "./show-scenes.ts";
 import { boxApiRoutes, sketchRoutes } from "./sketches.ts";
 import { createStreamRelay } from "./stream.ts";
 
@@ -67,9 +69,14 @@ const layout = createLayout({ db, arclampLights: lights.arclampLights, currentLi
 // The scene, followed as it changes, its footprints from the light stream;
 // arclamp's health, likewise; and sketches put in the room (instances).
 let instances: Instances | null = null;
+// The show clock: one for the room, told to every browser and sketch as it's set.
+const show = createShowClock();
+// The show's scenes, kept in the database, told to every browser as they change.
+// Fired, they blend down each sketch's pool's stream (params, below).
+const scenes = createShowScenes(db, Date.now, { linked: (pool) => params?.linked(pool) ?? false, level: (pool, to, ms) => params?.level(pool, to, ms) ?? false });
 // Pools' streams: each shader linked once (an eval), then a stream from it, taking each change.
 // Only where shaders can reach vibes (VIBES_SHADER_URL; env.ts).
-const params = builds && config.shaderUrl ? createParamLinks({ pools, arclamp, secret: config.sessionSecret, url: `${config.shaderUrl}/shader-api/params` }) : null;
+const params = builds && config.shaderUrl ? createParamLinks({ pools, arclamp, secret: config.sessionSecret, url: `${config.shaderUrl}/shader-api/params`, show }) : null;
 const feed = createSceneFeed({
   config,
   db,
@@ -106,7 +113,7 @@ if (sketches) app.route("/", boxApiRoutes(config, sketches, db, lights, pools, p
 if (builds) app.route("/", buildApiRoutes(config, builds));
 if (params) app.route("/", params.routes());
 const sketchApi = sketches && boxes && builds ? sketchRoutes(sketches, db, boxes, builds) : null;
-app.route("/api", apiRoutes({ config, arclamp: noted, db, relay, origins, lights, feed, live, pools, layout, sketches: sketchApi, instances, health }));
+app.route("/api", apiRoutes({ config, arclamp: noted, db, relay, origins, lights, feed, live, pools, layout, sketches: sketchApi, instances, health, show, scenes }));
 if (config.production) {
   // The built files' dates are Nix's (1970), which browsers take to mean the
   // page is fresh for years: a cached page then loads without the network

@@ -5,7 +5,7 @@
 import type { ParamSpec, ParamValue } from "../shared/params.ts";
 import { DatabaseSync } from "node:sqlite";
 import type { RailShape } from "../shared/rails.ts";
-import type { ActivityAction, ActivityEntry, CameraView, Me, Person, Spot } from "../shared/vibes.ts";
+import type { ActivityAction, ActivityEntry, CameraView, Me, Person, ShowScene, Spot } from "../shared/vibes.ts";
 
 interface ActivityRow {
   id: number;
@@ -24,6 +24,22 @@ export interface LogInput {
   shaderId?: number;
   shaderName?: string | null;
   detail?: Record<string, unknown>;
+}
+
+/** A scene's knobs as a row has them: kept by param, by light; a scene kept before pools had each param's values grouped ([value, [lights]], …), read as that. */
+function knobsOfRow(shaders: Record<string, unknown>): ShowScene["shaders"] {
+  return Object.fromEntries(
+    Object.entries(shaders).map(([key, knobs]) => {
+      if (!knobs || typeof knobs !== "object") return [key, null];
+      const byParam = Object.entries(knobs as Record<string, unknown>).map(([name, v]) => {
+        if (!Array.isArray(v)) return [name, v];
+        const byLight: Record<string, unknown> = {};
+        for (const [value, ids] of v as [unknown, number[]][]) for (const id of Array.isArray(ids) ? ids : []) byLight[String(id)] = value;
+        return [name, byLight];
+      });
+      return [key, Object.fromEntries(byParam)];
+    }),
+  ) as ShowScene["shaders"];
 }
 
 export function openDb(path: string) {
@@ -175,6 +191,18 @@ export function openDb(path: string) {
       at INTEGER NOT NULL,
       touched INTEGER NOT NULL
     );
+    -- The show's scenes (show-scenes.ts), in order (position): the shaders
+    -- each has on, by vibes' key, with their knobs as kept (JSON: key to
+    -- null, or by param, by light, as a pool has them).
+    CREATE TABLE IF NOT EXISTS show_scenes (
+      id TEXT PRIMARY KEY,
+      position INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      shaders TEXT NOT NULL,
+      by_id TEXT NOT NULL,
+      by_name TEXT NOT NULL,
+      at INTEGER NOT NULL
+    );
   `);
 
   const placementColumns = db.prepare("PRAGMA table_info(placements)").all() as { name: string }[];
@@ -253,6 +281,13 @@ export function openDb(path: string) {
       floor = excluded.floor, mm_x = excluded.mm_x, mm_y = excluded.mm_y, yaw = excluded.yaw, hfov = excluded.hfov,
       by_id = excluded.by_id, by_name = excluded.by_name, at = excluded.at
   `);
+  const selectShowScenes = db.prepare("SELECT * FROM show_scenes ORDER BY position");
+  const upsertShowScene = db.prepare(`
+    INSERT INTO show_scenes (id, position, name, shaders, by_id, by_name, at)
+    VALUES (?, (SELECT COALESCE(MAX(position), 0) + 1 FROM show_scenes), ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET name = excluded.name, shaders = excluded.shaders, by_id = excluded.by_id, by_name = excluded.by_name, at = excluded.at
+  `);
+  const deleteShowScene = db.prepare("DELETE FROM show_scenes WHERE id = ?");
   const selectTags = db.prepare("SELECT light_id, tags FROM light_tags");
   const upsertTags = db.prepare(`
     INSERT INTO light_tags (light_id, tags, by_id, by_name, at) VALUES (?, ?, ?, ?, ?)
@@ -340,6 +375,21 @@ export function openDb(path: string) {
 
     setCameraView(id: string, v: CameraView, by: Person) {
       upsertCameraView.run(id, v.floor, v.mm_x, v.mm_y, v.yaw, v.hfov, by.id, by.name, new Date().toISOString());
+    },
+
+    /** The show's scenes, in order. */
+    showScenes(): ShowScene[] {
+      const rows = selectShowScenes.all() as { id: string; name: string; shaders: string; by_id: string; by_name: string; at: number }[];
+      return rows.map((r) => ({ id: r.id, name: r.name, shaders: knobsOfRow(JSON.parse(r.shaders) as Record<string, unknown>), by: { id: r.by_id, name: r.by_name }, at: r.at }));
+    },
+
+    /** A scene saved: a new one goes last; one there already keeps its place. */
+    saveShowScene(scene: ShowScene) {
+      upsertShowScene.run(scene.id, scene.name, JSON.stringify(scene.shaders), scene.by.id, scene.by.name, scene.at);
+    },
+
+    removeShowScene(id: string) {
+      deleteShowScene.run(id);
     },
 
     /** Positions set in vibes, by light id. Null means deliberately unplaced. */

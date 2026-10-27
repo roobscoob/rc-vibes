@@ -23,7 +23,7 @@
 // preview, with why in the console.
 
 import type { Frame, LightInfo } from "../../shared/arclamp.ts";
-import { groupsOf, valuesOf, withChanges, type ParamSpec, type ParamTable, type ParamValue } from "../../shared/params.ts";
+import { clockAt, groupsOf, valuesOf, withChanges, withClockPatch, type ClockPatch, type HeardClock, type ParamSpec, type ParamTable, type ParamValue } from "../../shared/params.ts";
 import type { FrameSource } from "../live.ts";
 import { baseState, mergeOutput, prevOf, type RoomState } from "../sim.ts";
 // Inline, so it also starts where a page can't load a worker from a URL (a
@@ -75,6 +75,9 @@ export class SketchRunner implements FrameSource {
    * comes back (remote), so they're the same wherever they're turned.
    */
   values: ParamTable = {};
+  /** Whether the sketch reads the show clock; and the preview's own clock, kept the same way, to rehearse any part of a piece. */
+  usesClock = false;
+  clock: HeardClock | null = null;
   /** Bumped whenever any of the above changes, for React. */
   version = 0;
   /** Told what the sketch declares, each time that changes. */
@@ -176,8 +179,10 @@ export class SketchRunner implements FrameSource {
       else if (m.type === "params") {
         if (JSON.stringify(m.specs) !== JSON.stringify(this.params)) this.onDeclared?.(m.specs);
         this.params = m.specs;
-        // A fresh sandbox starts from the defaults: the knobs' values, again.
+        this.usesClock = m.clock;
+        // A fresh sandbox (or an update) starts from the defaults: the knobs' values, and the clock, again.
         this.post({ type: "params", values: this.values });
+        this.sendClock();
         this.changed();
       } else if (m.type === "out") this.answer(m.seq, m.out);
       else if (m.type === "hmr") this.onHmr?.(m.payload);
@@ -261,6 +266,17 @@ export class SketchRunner implements FrameSource {
     }
     this.post({ type: "params", values: this.values });
     this.changed();
+  }
+
+  /** The show clock here: started, stopped or moved from the transport. */
+  setClock(patch: ClockPatch) {
+    this.clock = withClockPatch(this.clock, patch, Date.now());
+    this.sendClock();
+    this.changed();
+  }
+
+  private sendClock() {
+    if (this.clock) this.post({ type: "clock", clock: clockAt(this.clock, Date.now())! });
   }
 
   dispose() {
