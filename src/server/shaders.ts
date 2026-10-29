@@ -15,7 +15,7 @@ import type { ShaderDescriptor } from "../shared/arclamp.ts";
 import { BASE_COLOR, isBaseColor } from "../shared/base-color.ts";
 import { cleanValue, PARAM_NAME, type Changes } from "../shared/params.ts";
 import type { Me, Person } from "../shared/vibes.ts";
-import type { Arclamp, Schedule } from "./arclamp.ts";
+import type { Arclamp } from "./arclamp.ts";
 import type { AuthEnv } from "./auth.ts";
 import type { Db, InstanceRow } from "./db.ts";
 import type { Config } from "./env.ts";
@@ -62,7 +62,7 @@ const badBody = (r: { success: boolean }, c: Context) => (r.success ? undefined 
 
 export interface ShaderDeps {
   config: Pick<Config, "signingKey">;
-  arclamp: Pick<Arclamp, "scene" | "shader" | "setMuted" | "setMutedAt" | "setMask" | "moveShader" | "deleteShader">;
+  arclamp: Pick<Arclamp, "scene" | "shader" | "setMuted" | "setMask" | "moveShader" | "deleteShader">;
   db: Db;
   /** Sketches in the room (null with sketches off). */
   instances: Instances | null;
@@ -124,23 +124,6 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
       db.log({ user, action: muted ? "shader.mute" : "shader.unmute", shaderId: it.d.id, shaderName: nameOf(it.d, it.instance) });
     },
 
-    /**
-     * Muted or not, put off till a frame (Schedule, arclamp.ts): the frame it
-     * goes in with, or null if it went in at once (its time had passed, or
-     * it isn't in the room yet: kept for when it goes in). Logged by its
-     * caller, as one thing done (a scene applied).
-     */
-    async setMutedAt(key: string, muted: boolean, schedule: Schedule, user: Person): Promise<number | null> {
-      if (await wanted(key, { muted }, user)) return null;
-      const it = resolve(key, user);
-      if (!it) throw new Refused(404, "not_found", "no such shader");
-      if (it.arclampId === null) throw new Refused(409, "not_live", "it isn't in the room yet");
-      return arclamp.setMutedAt(it.arclampId, muted, schedule);
-    },
-
-    /** A key's shader in arclamp, by arclamp's id; null if it isn't in the room (or there's no such shader). */
-    idOf: (key: string, user: Person): number | null => resolve(key, user)?.arclampId ?? null,
-
     /** The lights a shader may not change: its whole mask ([] clears it). */
     async setMask(key: string, mask: number[], user: Person) {
       const asked = [...new Set(mask)].sort((a, b) => a - b);
@@ -158,7 +141,6 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
      */
     async remove(key: string, user: Person) {
       const it = resolve(key, user);
-      if (isBaseColor(it?.instance?.id)) throw new Refused(403, "base_color", "Base Color is always in the room: mute it instead");
       if (it?.instance && instances) {
         await instances.remove(it.instance.id, user);
         return;
@@ -206,7 +188,7 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
       const it = resolve(key, user);
       if (!it) throw new Refused(404, "not_found", "no such shader");
       if (!it.instance || !instances) throw new Refused(400, "no_home", "it wasn't put in from a sketch, so it has no home");
-      if (isBaseColor(it.instance.id)) throw new Refused(403, "base_color", "Base Color's home is every light");
+      if (isBaseColor(it.instance.id)) throw new Refused(403, "base_color", "Base Tone's home is every light");
       const moved = await instances.setHome(it.instance.id, home, user);
       if ("refused" in moved) throw new Refused(moved.status, moved.code, moved.refused);
     },
@@ -215,7 +197,7 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
      * The stack in this order, top first. Those in the room are moved; each
      * not in yet is to go in just above the one under it here (or at the
      * bottom); gone ones are passed over. Any in the room it leaves out stay
-     * on top (put in since whoever asked last looked). Base Color stays at
+     * on top (put in since whoever asked last looked). The base Tone stays at
      * the bottom, wherever the order puts it, or if it leaves it out.
      */
     async reorder(order: string[], user: Person) {

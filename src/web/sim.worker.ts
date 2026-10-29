@@ -11,12 +11,13 @@
 //
 // A shader's params come as they would from vibes' stream in the room: all of
 // them, handed to the library with __vibes.apply (packages/vibes/src/param.ts).
+// The page may send them before the script has loaded (the library isn't
+// there yet to take them): the latest are kept, and handed over once it is.
 // What it declares goes the other way, once it's loaded: for a sketch being
 // added, that's how the page knows its params before it's in the room.
 
 import type { VibesHost } from "../../packages/vibes/src/param.ts";
 import type { ParamSpec, ParamTable } from "../shared/params.ts";
-import type { ShowClock } from "../shared/show.ts";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope & Record<string, unknown>;
 
@@ -45,24 +46,25 @@ export type ToWorker =
   | { type: "load"; script: string }
   | { type: "tick"; seq: number; prev: unknown; now: number; initial: number }
   /** Its params' values, all of them, as vibes' stream sends them. */
-  | { type: "params"; values: ParamTable }
-  /** The show clock, as vibes' stream sends it. */
-  | { type: "clock"; clock: ShowClock };
+  | { type: "params"; values: ParamTable };
 export type FromWorker =
   /** Loaded, with what it declares as params (as the library has them; none without one). */
   | { type: "loaded"; declared: ParamSpec[] }
   | { type: "out"; seq: number; out: unknown }
   | { type: "error"; seq?: number; message: string };
 
+// The params' values last sent, to hand the library once the script's loaded, if they came first.
+let params: ParamTable | null = null;
+const handOver = () => {
+  if (params) (scope.__vibes as VibesHost | undefined)?.apply("state", { v: 1, values: params });
+};
+
 scope.onmessage = (e: MessageEvent<ToWorker>) => {
   const m = e.data;
   const reply = (r: FromWorker) => scope.postMessage(r);
   if (m.type === "params") {
-    (scope.__vibes as VibesHost | undefined)?.apply("state", { v: 1, values: m.values });
-    return;
-  }
-  if (m.type === "clock") {
-    (scope.__vibes as VibesHost | undefined)?.apply("clock", { v: 1, clock: m.clock });
+    params = m.values;
+    handOver();
     return;
   }
   if (m.type === "load") {
@@ -70,6 +72,7 @@ scope.onmessage = (e: MessageEvent<ToWorker>) => {
       // Indirect eval: global scope, not strict, like a script tag.
       (0, eval)(m.script);
       if (typeof scope.update !== "function") throw new Error("the script doesn't define an update() function");
+      handOver();
       reply({ type: "loaded", declared: (scope.__vibes as VibesHost | undefined)?.params() ?? [] });
     } catch (err) {
       reply({ type: "error", message: message(err) });

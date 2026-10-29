@@ -17,7 +17,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Channels } from "../shared/arclamp.ts";
-import { isBaseColor } from "../shared/base-color.ts";
+import { BASE_TONE_NAME, isBaseColor } from "../shared/base-color.ts";
 import { keysOf, pathOf, type AddSpec, type Op, type Pool } from "../shared/live.ts";
 import {
   changedParts,
@@ -32,7 +32,6 @@ import {
   type ParamValue,
   type ShaderParams,
 } from "../shared/params.ts";
-import { applyingOf, isBase, type Scene as SavedScene } from "../shared/scenes.ts";
 import type { Instance, ShaderKey, ShaderSketch } from "../shared/vibes.ts";
 import { invalidateScene, sendUpdate, UpdateError, type Scene, type SceneShader } from "./scene.ts";
 
@@ -253,7 +252,7 @@ export function domainOf(layer: Layer): number[] {
  * mask left as it was); otherwise unmuted and masked from every other light.
  * An instance (or a sketch being added) can only light its home, so lights
  * outside it are added to it; one put in some other way has no home, its
- * mask is all there is. Base Color's home is every light, and nobody moves
+ * mask is all there is. The base Tone's home is every light, and nobody moves
  * it (vibes refuses to): just its mask, for it.
  */
 export function domainPatch(layer: Layer, ids: Iterable<number>, all: readonly number[]): ShaderPatch {
@@ -354,7 +353,8 @@ function layerOfShader(scene: Scene, shader: SceneShader, d: Draft): Layer {
     key: shader.key,
     stage: shader.stage,
     shader,
-    name: shader.name,
+    // The base Tone is a Tone set as the base: called so everywhere.
+    name: isBaseColor(shader.key) ? BASE_TONE_NAME : shader.name,
     sketch: shader.sketch,
     script: shader.script ?? "",
     muted: patch.muted ?? shader.muted,
@@ -586,31 +586,6 @@ export const drafts = {
   },
   reorder(keysTopFirst: LayerKey[]) {
     set({ ...draft, order: keysTopFirst });
-  },
-  /**
-   * A scene applied (shared/scenes.ts), as pending edits over the live room:
-   * every shader's mute (but Base Color's), and the scene's sketch's knobs,
-   * each in place of whatever was pending for it; anything else pending
-   * stays. In live mode, sent as they're made, as any edit is.
-   */
-  applyScene(scene: SavedScene, live: Scene) {
-    const edits = { ...draft.edits };
-    for (const s of live.shaders) {
-      if (s.stage === "failed" || isBase(s)) continue;
-      const { muted: _muted, params, ...rest } = edits[s.key] ?? {};
-      // Its pending mute gives way; its pending knobs too, if it's the scene's sketch.
-      const kept = Object.hasOwn(scene.shaders, s.key) ? rest : { ...rest, ...(params ? { params } : {}) };
-      if (Object.keys(kept).length > 0) edits[s.key] = kept;
-      else delete edits[s.key];
-    }
-    const { on, off, knobs } = applyingOf(scene, live.shaders, live.pools);
-    for (const key of off) edits[key] = { ...edits[key], muted: true };
-    for (const key of on) edits[key] = { ...edits[key], muted: false };
-    for (const k of knobs) {
-      const params = edits[k.key]?.params ?? {};
-      edits[k.key] = { ...edits[k.key], params: { ...params, [k.param]: { ...params[k.param], ...Object.fromEntries(k.set) } } };
-    }
-    set({ ...draft, edits });
   },
   /** Take a shader out of the room. */
   remove(key: LayerKey) {
