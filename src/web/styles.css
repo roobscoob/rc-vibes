@@ -3075,14 +3075,15 @@ input.tempo-bpm {
   border-top: 1px solid var(--edge);
 }
 
+/* The chips take what's left of the row; with too little for them, a row of their own. */
 .scenes-bar {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: flex-start;
 }
 
 .scenes {
   display: flex;
-  flex: 1;
+  flex: 1 1 180px;
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
@@ -3206,6 +3207,193 @@ input.tempo-bpm {
 
 .menu-item.bad {
   color: var(--bad);
+}
+
+/* The timeline button, while it's open. */
+.scene-add.on {
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--ink);
+}
+
+/* While the timeline's open, a chip drags onto it (and doesn't scroll the page). */
+.scene-chip.draggable .scene-apply {
+  cursor: grab;
+  touch-action: none;
+}
+
+/* The chip being dragged, under the pointer. */
+.chip-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--solid);
+  box-shadow:
+    inset 0 0 0 1px var(--edge),
+    var(--float);
+  color: var(--ink);
+  font-size: 12.5px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* The show's timeline (Timeline.tsx): a ruler in bars, rows of blocks, the
+   playhead over them; the view scrolls along it, and up and down past a few
+   rows. --px is a beat's width, --bar-px a bar's. */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 var(--dock-pad);
+}
+
+.tl-scroll {
+  overflow: auto;
+  max-height: 40vh;
+  border-radius: 10px;
+  background: var(--well);
+  overscroll-behavior: contain;
+}
+
+.tl-canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+.tl-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--solid);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.tl-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding: 4px 0 0 4px;
+  border-left: 1px solid var(--edge);
+  color: var(--mute);
+  font-size: 10.5px;
+  pointer-events: none;
+}
+
+/* Rows, a beat's line faint and a bar's less so. */
+.tl-rows {
+  position: relative;
+  background-image:
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px),
+    linear-gradient(to right, var(--edge) 1px, transparent 1px),
+    linear-gradient(to right, var(--line) 1px, transparent 1px);
+  background-size:
+    100% var(--row-h),
+    var(--bar-px) 100%,
+    var(--px) 100%;
+}
+
+.tl-block {
+  --block: hsl(var(--hue) 42% 46%);
+  position: absolute;
+  display: flex;
+  align-items: center;
+  height: calc(var(--row-h) - 4px);
+  margin-top: 2px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--block) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--block) 85%, white 15%);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+}
+
+.tl-block.selected {
+  box-shadow:
+    inset 0 0 0 1px var(--ink),
+    0 0 0 2px var(--focus);
+  z-index: 1;
+}
+
+.tl-block.moving {
+  cursor: grabbing;
+  opacity: 0.85;
+  z-index: 1;
+}
+
+/* A block whose scene's been taken away: it plays nothing. */
+.tl-block.gone {
+  --block: rgb(120 116 110);
+  color: var(--mute);
+  font-style: italic;
+}
+
+/* Where a chip dragged over the rows would land. */
+.tl-block.landing {
+  border: 1px dashed color-mix(in srgb, var(--block) 85%, white 15%);
+  background: color-mix(in srgb, var(--block) 25%, transparent);
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.tl-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A block's ends, to drag. */
+.tl-end {
+  flex: none;
+  align-self: stretch;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.tl-block:hover .tl-end,
+.tl-block.selected .tl-end {
+  background: rgb(255 255 255 / 0.12);
+}
+
+.tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--warn);
+  pointer-events: none;
+}
+
+.tl-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 0 0;
+}
+
+.tl-hint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mute);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Admin mode's clock readout (ClockSync.tsx), beside the map's delay: how

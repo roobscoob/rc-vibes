@@ -17,8 +17,12 @@
 // as the finger comes down (rtime.ts), as Tap's is. One waiting for its
 // frame is marked so; and the number keys apply them, 1 to 9, away from
 // anything typed in.
+//
+// In a show, the show's timeline (Timeline.tsx) opens between the two.
+// While it's open, a scene's chip drags onto it, and applies as it's let go
+// of without moving (still at the moment it was pressed, for the cue).
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { pathOf, type Op } from "../../shared/live.ts";
 import { isBase, knobsOf, onScene, type Scene as SavedScene, type Scenes } from "../../shared/scenes.ts";
 import type { CueMode } from "../../shared/show.ts";
@@ -28,7 +32,46 @@ import { rOfEvent } from "../rtime.ts";
 import { sendApply, sendScenes, sendTransport, useScene, useScenes, useShowCue, useShowOn, useShowQueued, type Scene } from "../scene.ts";
 import { Menu } from "./Menu.tsx";
 import { Segmented } from "./Segmented.tsx";
+import { ChipGhost, chipDrag, dropChip, Timeline } from "./Timeline.tsx";
 import { press, Transport } from "./Transport.tsx";
+
+// A chip pressed and moved this far is being dragged, not applied.
+const DRAG_PX = 6;
+
+/** A chip's press, while the timeline's open: dragged, onto it; let go of where it was, applied, at the moment it was pressed (a keyboard's click, at once). */
+function dragOrApply(scene: string, name: string, apply: (e: { timeStamp: number }) => void) {
+  return {
+    onPointerDown: (e: ReactPointerEvent) => {
+      if (e.button !== 0) return;
+      const x0 = e.clientX;
+      const y0 = e.clientY;
+      const pressed = e.timeStamp;
+      let dragging = false;
+      const move = (m: PointerEvent) => {
+        if (!dragging && Math.hypot(m.clientX - x0, m.clientY - y0) < DRAG_PX) return;
+        dragging = true;
+        chipDrag.set({ scene, name, x: m.clientX, y: m.clientY });
+      };
+      const done = (u: PointerEvent, dropped: boolean) => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", cancel);
+        if (dragging) {
+          if (dropped) dropChip({ scene, name, x: u.clientX, y: u.clientY });
+          chipDrag.set(null);
+        } else if (dropped) apply({ timeStamp: pressed });
+      };
+      const up = (u: PointerEvent) => done(u, true);
+      const cancel = (u: PointerEvent) => done(u, false);
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", cancel);
+    },
+    onClick: (c: MouseEvent) => {
+      if (c.detail === 0) apply(c);
+    },
+  };
+}
 
 const CUES: { value: CueMode; label: string }[] = [
   { value: "now", label: "Now" },
@@ -49,6 +92,8 @@ const choosable = (room: Scene) => room.shaders.filter((s) => s.stage !== "faile
 
 export function ScenesDrawer({ onHeight }: { onHeight: (px: number) => void }) {
   const showOn = useShowOn();
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const building = showOn && timelineOpen;
   const dock = useRef<HTMLDivElement>(null);
 
   // As tall as it is, for the map to keep its own along the bottom above it.
@@ -68,12 +113,15 @@ export function ScenesDrawer({ onHeight }: { onHeight: (px: number) => void }) {
   return (
     <div className="show-dock" ref={dock}>
       {showOn && <Transport />}
-      <ScenesBar />
+      {building && <Timeline />}
+      <ScenesBar building={building} onTimeline={showOn ? () => setTimelineOpen(!timelineOpen) : null} />
+      <ChipGhost />
     </div>
   );
 }
 
-function ScenesBar() {
+/** `building`: the timeline's open, the chips drag onto it; `onTimeline`, in a show: opens or closes it. */
+function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: (() => void) | null }) {
   const scenes = useScenes();
   const room = useScene().data;
   const showOn = useShowOn();
@@ -137,7 +185,7 @@ function ScenesBar() {
         {scenes.order.map((id, i) => {
           const scene = scenes.list[id];
           return scene && room ? (
-            <SceneChip key={id} id={id} n={i + 1} scene={scene} lit={lit === id} queued={queued?.scene === id} show={showOn} room={room} apply={apply} send={send} />
+            <SceneChip key={id} id={id} n={i + 1} scene={scene} lit={lit === id} queued={queued?.scene === id} show={showOn} building={building} room={room} apply={apply} send={send} />
           ) : null;
         })}
         {scenes.order.length === 0 && <span className="scenes-empty">No scenes yet: + Scene keeps the room as one.</span>}
@@ -150,6 +198,11 @@ function ScenesBar() {
       <button className="scene-add" onClick={create} disabled={!room} aria-label="New scene: the room as it is, if one sketch is on">
         + Scene
       </button>
+      {onTimeline && (
+        <button className={`scene-add${building ? " on" : ""}`} onClick={onTimeline} aria-pressed={building}>
+          Timeline
+        </button>
+      )}
     </div>
   );
 }
@@ -163,12 +216,14 @@ interface ChipProps {
   queued: boolean;
   /** A show's on: applied on its clock, as the press comes down. */
   show: boolean;
+  /** The timeline's open: it drags onto it. */
+  building: boolean;
   room: Scene;
   apply: (id: string, e: { timeStamp: number }) => void;
   send: (ops: Op[]) => void;
 }
 
-function SceneChip({ id, n, scene, lit, queued, show, room, apply, send }: ChipProps) {
+function SceneChip({ id, n, scene, lit, queued, show, building, room, apply, send }: ChipProps) {
   const [deleting, setDeleting] = useState(false);
   const keys = Object.keys(scene.shaders);
   const sketch = room.shaders.find((s) => keys.includes(s.key));
@@ -180,11 +235,11 @@ function SceneChip({ id, n, scene, lit, queued, show, room, apply, send }: ChipP
   };
 
   const what = sketch ? sketch.name : keys.length > 0 ? "a sketch that's left the room" : "no sketch yet";
-  const applying = show ? press((e) => apply(id, e)) : { onClick: (e: { timeStamp: number }) => apply(id, e) };
+  const applying = building ? dragOrApply(id, scene.name, (e) => apply(id, e)) : show ? press((e) => apply(id, e)) : { onClick: (e: { timeStamp: number }) => apply(id, e) };
   const label = !sketch ? `${n} ${scene.name}: it has ${what}` : show && n <= 9 ? `${n} ${scene.name}: apply it (${n}), ${what}` : `${n} ${scene.name}: apply it, ${what}`;
   return (
-    <span className={`scene-chip${lit ? " lit" : ""}${queued ? " queued" : ""}`}>
-      <button className="scene-apply" {...applying} disabled={!sketch} aria-label={label}>
+    <span className={`scene-chip${lit ? " lit" : ""}${queued ? " queued" : ""}${building ? " draggable" : ""}`}>
+      <button className="scene-apply" {...applying} disabled={!sketch && !building} aria-label={building ? `${label}; drag it onto the timeline` : label}>
         <small className="mono">{n}</small>
         {scene.name}
       </button>

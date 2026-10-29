@@ -17,6 +17,7 @@ import { fanOps, pathOf, unfanOps, withOps, type LiveTree, type Op, type Pool, t
 import type { Presence } from "../shared/presence.ts";
 import { NO_SCENES, type Scenes } from "../shared/scenes.ts";
 import { RESTING, type CueMode, type ShowClock, type ShowState, type TransportAction } from "../shared/show.ts";
+import { NO_TIMELINE, type Block, type Playhead, type Timeline } from "../shared/show-timeline.ts";
 import type { Lights, Placement, RailChange, Shader, ShaderKey, TagChange, TypeChange } from "../shared/vibes.ts";
 import { apiSocket, request } from "./api.ts";
 import { heard as heardTime, pageNow } from "./rtime.ts";
@@ -43,11 +44,25 @@ interface State {
   clock: ShowClock;
   cue: CueMode;
   queued: ShowState["queued"];
+  /** Where the show's timeline's playhead is, and the timeline (shared/show-timeline.ts). */
+  playhead: Playhead;
+  timeline: Timeline;
   /** The room's scenes (shared/scenes.ts). */
   scenes: Scenes;
 }
 
-let state: State = { scene: undefined, layout: undefined, error: null, showOn: RESTING.on, clock: RESTING.clock, cue: RESTING.cue, queued: null, scenes: NO_SCENES };
+let state: State = {
+  scene: undefined,
+  layout: undefined,
+  error: null,
+  showOn: RESTING.on,
+  clock: RESTING.clock,
+  cue: RESTING.cue,
+  queued: null,
+  playhead: RESTING.playhead,
+  timeline: NO_TIMELINE,
+  scenes: NO_SCENES,
+};
 let tree: LiveTree | null = null;
 // The last change the copy here has, of which run of vibes.
 let rev: number | null = null;
@@ -91,7 +106,18 @@ function publish() {
       : undefined;
   }
   const show = tree.show ?? RESTING;
-  state = { scene, layout, error: null, showOn: show.on, clock: show.clock ?? RESTING.clock, cue: show.cue ?? RESTING.cue, queued: show.queued ?? null, scenes: tree.scenes ?? NO_SCENES };
+  state = {
+    scene,
+    layout,
+    error: null,
+    showOn: show.on,
+    clock: show.clock ?? RESTING.clock,
+    cue: show.cue ?? RESTING.cue,
+    queued: show.queued ?? null,
+    playhead: show.playhead ?? RESTING.playhead,
+    timeline: tree.timeline ?? NO_TIMELINE,
+    scenes: tree.scenes ?? NO_SCENES,
+  };
   for (const l of listeners) l();
 }
 
@@ -377,6 +403,19 @@ export function useShowQueued(): ShowState["queued"] {
 
 /** A scene applied on the show's clock, pressed at `at` (arclamp's time: rtime.ts), whatever the mode: the show's. */
 export const sendApply = (scene: string, at: number) => sendUpdate([[pathOf("show", "apply"), { scene, at }]]);
+
+/** Where the show's timeline's playhead is (shared/show-timeline.ts), as vibes last said. */
+export function useShowPlayhead(): Playhead {
+  return useSyncExternalStore(subscribe, () => state.playhead);
+}
+
+/** The show's timeline (shared/show-timeline.ts), as vibes last said it. */
+export function useTimeline(): Timeline {
+  return useSyncExternalStore(subscribe, () => state.timeline);
+}
+
+/** A block put on the timeline, whole (null: taken away), at once whatever the mode: the timeline's the room's, never a pending edit. */
+export const sendBlock = (id: string, block: Pick<Block, "scene" | "row" | "start" | "end"> | null) => sendUpdate([[pathOf("timeline", "blocks", id), block]]);
 
 /** A change to the map: rails drawn or moved, lights moved, turned to another orientation, and/or tagged. */
 export interface LayoutChange {
