@@ -7,7 +7,6 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { boxCommitFolder, type Sketch } from "../../shared/vibes.ts";
 import { RequestError, useBox, useDeleteSketch, useRestoreSketch, useSketch } from "../api.ts";
-import { useLights } from "../scene.ts";
 import { Brand } from "../components/Brand.tsx";
 import { UserMenu } from "../components/UserMenu.tsx";
 import { TrashIcon } from "../icons.tsx";
@@ -35,12 +34,12 @@ export function SketchPages({ path }: { path: string }) {
 }
 
 function TopBar({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
-  const lights = useLights();
   return (
     <header className="page-bar">
       <Link to="/" className="page-brand">
-        <Brand lights={lights.data?.lights ?? []} />
+        <Brand />
       </Link>
+      <span className="crumb-sep">/</span>
       {children}
       <span className="spacer" />
       {actions}
@@ -112,8 +111,6 @@ function SketchPage({ id }: { id: string }) {
     <div className="sketch-page">
       <TopBar actions={sketch.data && !deleted && <DeleteSketch sketch={sketch.data} />}>
         <nav className="crumbs">
-          <Link to="/">Room</Link>
-          <span className="crumb-sep">/</span>
           {commit ? (
             <>
               <Link to={`/sketches/${id}`} className="crumb-name">

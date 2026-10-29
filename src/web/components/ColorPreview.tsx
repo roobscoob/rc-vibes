@@ -3,7 +3,7 @@
 // gathered in the map's top left (on a wide screen; a phone hasn't
 // the room) with no card, like a car's
 // instruments: their colors as dots on a color wheel, or, for the whites, on
-// a field of color temperature across and tint up and down (Color · White
+// a field of color temperature across and tint up and down (White · Hue
 // over it); under it, brightness and fidelity as a small metaball per light
 // along a track, in the color it's showing. (Old bulbs, just on or off, aren't here.)
 // Lights at exactly the same value share one dot (with a count) or ball.
@@ -137,12 +137,12 @@ export function ColorPreview({ lights }: Props) {
       aria-label="What they look like"
     >
       {look && (
-        // The color editor's box of tabs (ColorField.tsx), White · Color over the wheel or the field.
+        // The color editor's box of tabs (ColorField.tsx), White · Hue over the field or the wheel.
         <div className="preview-look tone-box">
           <div className="tone-tabs" role="tablist" aria-label="Show">
             {(["white", "color"] as const).map((v) => (
               <button key={v} role="tab" aria-selected={view === v} className={view === v ? "tone-tab on" : "tone-tab"} onClick={() => setView(v)}>
-                {v === "color" ? "Color" : "White"}
+                {v === "color" ? "Hue" : "White"}
               </button>
             ))}
           </div>

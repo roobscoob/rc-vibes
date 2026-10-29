@@ -148,7 +148,8 @@ function Shell() {
               0,
               layers.findIndex((l) => l.key === peeking),
             );
-    return { lights: all, layers: layers.map((l, i) => (i < above ? { ...l, muted: true } : l)), template: templateOf(live, draft) };
+    // Every layer runs; the simulation sets those above aside just for what the map shows (the rail's stops show them all).
+    return { lights: all, layers, template: templateOf(live, draft), peekAbove: above };
   }, [all, live, draft, peeking]);
   // Their builds, asked for and watched.
   useAddingBuilds();

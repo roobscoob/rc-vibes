@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTag, sameTags, tagLabel } from "./tags.ts";
+import { groupRank, inSideRooms, normalizeTag, sameTags, tagLabel } from "./tags.ts";
 
 describe("normalizeTag", () => {
   it("lowercases and joins words with hyphens", () => {
@@ -33,5 +33,19 @@ describe("sameTags", () => {
     expect(sameTags(["a", "b"], ["b", "a"])).toBe(true);
     expect(sameTags(null, [])).toBe(true);
     expect(sameTags(["a"], ["a", "b"])).toBe(false);
+  });
+});
+
+describe("the groups' order", () => {
+  it("is the main space and its parts, then the side rooms and theirs; other tags after, by name", () => {
+    const given = ["ritchie", "kitchen", "*side", "couches", "presentation-space", "turing", "dave", "*main", "dining-room", "lobby", "hopper", "sammet", "attic"];
+    const sorted = [...given].sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b));
+    expect(sorted).toEqual(["*main", "presentation-space", "lobby", "dave", "kitchen", "dining-room", "couches", "*side", "sammet", "hopper", "turing", "ritchie", "attic"]);
+  });
+
+  it("puts a light in the side rooms by any of their tags", () => {
+    expect(inSideRooms(["turing"])).toBe(true);
+    expect(inSideRooms(["kitchen"])).toBe(false);
+    expect(inSideRooms(null)).toBe(false);
   });
 });

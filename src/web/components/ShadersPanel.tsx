@@ -1,12 +1,13 @@
 // The layers in the room (its shaders), in a panel along the left of the
 // map: the bottom of the stack first, as the selection's rows read (each
-// draws over what's above it), dragged by their chevrons to reorder the
+// draws over what's above it), dragged by their grips to reorder the
 // stack, on the same rail as the selection's: a stop each, in the light it
 // makes on its lights (hollow while it's off, or not in yet). Last on the
-// rail, the library (AddSketch.tsx): adding another, on every light. The
+// rail, the library (AddSketch.tsx): adding another, on the lights selected
+// (every light, with none). The
 // library also opens from the code button in the panel's head.
 //
-// Under its name, how many lights it's on, of each kind; after it, with
+// Under its name, how many lights it's on; after it, with
 // changes to it not saved yet, its own pink asterisk (as the selection's
 // title has for the whole room's), which selects the lights they change on
 // this floor. Clicking a layer
@@ -15,10 +16,9 @@
 // them selected, adds them), or, on none
 // here, lets go of the selection, and does nothing else (the map stays put);
 // under the pointer, its lights are ringed, dashed, on the map (hint.ts, as
-// its asterisk's are). Its chevron (also the handle to drag it by)
-// opens it, under its row, to the lights it's on, each kind on a line in
-// their colors (LightsSummary.tsx, as the map's tooltip says them), and what
-// can be done to it: opening its
+// its asterisk's are). Every row is open, always: under it, the lights it's
+// on, each kind on a line in their colors (LightsSummary.tsx, as the map's
+// tooltip says them), and what can be done to it: opening its
 // code, editing its domain on the map (layer-mode.ts: the map becomes a shader
 // selector), cloning it, updating it, and deleting it (or keeping it, once
 // it's going).
@@ -31,21 +31,18 @@ import type { LightInfo } from "../../shared/arclamp.ts";
 import { layerMode, useLayerMode } from "../layer-mode.ts";
 import { queryClient, request, useBranchHead, useSketchChanges, useStatus } from "../api.ts";
 import { invalidateScene } from "../scene.ts";
-import { useOpened } from "../opened.ts";
 import { focusLayer } from "../focus.ts";
 import { useStuckHeads } from "../stuck.ts";
 import { changeable, changesByLayer, domainOf, drafts, layerOf, layersOf, removedOf, reorderWithin, useDraft, type Layer } from "../draft.ts";
-import { ChevronUpIcon, CodeIcon, DomainIcon, FocusIcon, PlusIcon } from "../icons.tsx";
+import { CodeIcon, DomainIcon, FocusIcon, GripIcon, PlusIcon } from "../icons.tsx";
 import { useLights, useScene, type Scene } from "../scene.ts";
 import { isBaseColor } from "../../shared/base-color.ts";
 import { defaultSketch } from "../../shared/default-sketches.ts";
-import { baseType, isBinary } from "../../shared/fixtures.ts";
 import { count } from "../words.ts";
 import { AddSketch } from "./AddSketch.tsx";
 import { Sidebar, SidebarDetails, SidebarSection } from "./Sidebar.tsx";
 import { LightsSummary } from "./LightsSummary.tsx";
 import { AddingActions, CloneShader, ComingActions, OpenCode, RemoveShader } from "./ShaderPanel.tsx";
-import { Reveal } from "./Reveal.tsx";
 import { keyedMode, type SelectMode } from "../selection.ts";
 import { ChangesMark, inPreview, ShaderNode, withGoing } from "./SelectionPanel.tsx";
 import { useShowUnsaved } from "../unsaved.ts";
@@ -82,29 +79,32 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
   // Not in live mode, where they're sent as they're made (unsaved.ts).
   const showUnsaved = useShowUnsaved();
   const changes = showUnsaved ? changesByLayer(live, draft) : NO_CHANGES;
-  const opened = useOpened();
   // The layer the map's about (in focus, or its domain being edited): its row says so.
   const mode = useLayerMode();
   const body = useRef<HTMLDivElement>(null);
   useStuckHeads(body);
 
-  // Adding one, on every light in the room, whatever's selected (from main,
-  // for now: there's no picking a branch yet). Narrow it afterwards from the
-  // selection's switches.
+  // Adding one: on the lights selected (here), if any are, its home and all
+  // it lights, masked off the rest; else on every light in the room. From
+  // main, for now: there's no picking a branch yet. Widen or narrow it
+  // afterwards by editing its domain.
   const [picking, setPicking] = useState(false);
   const add = (sketch: { id: string; name: string }) => {
     setPicking(false);
+    const every = all.map((l) => l.id);
+    const home = selected.size > 0 ? [...selected].sort((a, b) => a - b) : every;
+    const inHome = new Set(home);
     drafts.add({
       sketchId: sketch.id,
       sketchName: sketch.name,
       branch: "main",
-      home: all.map((l) => l.id),
-      mask: [],
+      home,
+      mask: every.filter((id) => !inHome.has(id)),
     });
   };
   const sketches = status.data?.sketches === true;
 
-  // Dragging a sketch by its chevron moves it in the stack (the room's order, for every light).
+  // Dragging a sketch by its grip moves it in the stack (the room's order, for every light).
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, {
@@ -144,7 +144,6 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
         <SortableContext items={listed} strategy={verticalListSortingStrategy}>
           <ol className="layers">
             {shown.map((layer) => {
-              const open = opened.isOpen(layer.key);
               const props: RowProps = {
                 layer,
                 going: going.has(layer.key),
@@ -154,8 +153,6 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
                 scene: live,
                 editing: mode?.kind === "edit" && mode.key === layer.key,
                 active: mode?.key === layer.key,
-                open,
-                onToggle: () => opened.toggle(layer.key),
                 onPick: (mode) => {
                   // The selection panel shuts every row but this one's.
                   focusLayer(layer.key);
@@ -166,13 +163,10 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
                   else if (mode === "replace") onSelect([], "replace");
                 },
                 onSelect,
-                onCloned: (key) => {
-                  if (!opened.isOpen(key)) opened.toggle(key);
-                },
               };
               return listed.includes(layer.key) ? <SortableShaderRow key={layer.key} {...props} /> : <ShaderRow key={layer.key} {...props} />;
             })}
-            {/* Last on the rail, another, on every light. */}
+            {/* Last on the rail, another, on the lights selected (every light, with none). */}
             {sketches && (
               <li className="layer add-row" onClick={() => setPicking(true)}>
                 <div className="layer-rail">
@@ -206,14 +200,11 @@ interface RowProps {
   editing: boolean;
   /** The map's about it: in focus, or its domain being edited. */
   active: boolean;
-  open: boolean;
-  onToggle: () => void;
   /** Its row clicked: its lights on this floor selected (shift: added; alt: taken out), or, with none here, nothing selected. */
   onPick: (mode: SelectMode) => void;
   /** Lights selected from its asterisk. */
   onSelect: (ids: number[], mode: SelectMode) => void;
-  onCloned: (key: string) => void;
-  /** Moving it: its chevron is the handle to drag it by (useSortable's), and how it's carried. */
+  /** Moving it: its grip is the handle to drag it by (useSortable's), and how it's carried. */
   drag?: {
     handle: ButtonHTMLAttributes<HTMLButtonElement>;
     ref: (el: HTMLElement | null) => void;
@@ -222,7 +213,7 @@ interface RowProps {
   };
 }
 
-/** A sketch that can be moved: dragged by its chevron to another place in the stack. */
+/** A sketch that can be moved: dragged by its grip to another place in the stack. */
 function SortableShaderRow(props: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.layer.key });
   const drag = {
@@ -238,7 +229,7 @@ function SortableShaderRow(props: RowProps) {
   return <ShaderRow {...props} drag={drag} />;
 }
 
-function ShaderRow({ layer, going, changed, here, all, scene, editing, active, open, onToggle, onPick, onSelect, onCloned, drag }: RowProps) {
+function ShaderRow({ layer, going, changed, here, all, scene, editing, active, onPick, onSelect, drag }: RowProps) {
   const on = domainOf(layer);
   // Under the pointer, its lights pointed out on the map.
   const pointsOut = usePointsOut(() => domainOf(layer));
@@ -246,7 +237,7 @@ function ShaderRow({ layer, going, changed, here, all, scene, editing, active, o
     <li
       ref={drag?.ref}
       style={drag?.style}
-      className={["layer shader-row", open && "open", going && "going", layer.muted && "off", active && "active", drag?.dragging && "dragging"]
+      className={["layer shader-row open", going && "going", layer.muted && "off", active && "active", drag?.dragging && "dragging"]
         .filter(Boolean)
         .join(" ")}
     >
@@ -263,9 +254,9 @@ function ShaderRow({ layer, going, changed, here, all, scene, editing, active, o
             {layer.name}
             {changed && <ChangesMark changed={changed} here={here} onSelect={onSelect} />}
           </span>
-          <span className="layer-meta">{kindsText(on, all)}</span>
+          <span className="layer-meta">{count(on.length, "light")}</span>
         </span>
-        {/* The map's about it: which way, by its button's icon, filled as the button is while it's on, just before its chevron.
+        {/* The map's about it: which way, by its button's icon, filled as the button is while it's on, just before its grip.
             Pressed, it's off: the edit discarded (as the pill's × does, back to focus if it came from there), or the focus let go of. */}
         {active && (
           <button
@@ -276,39 +267,21 @@ function ShaderRow({ layer, going, changed, here, all, scene, editing, active, o
             {editing ? <DomainIcon /> : <FocusIcon />}
           </button>
         )}
-        <button
-          className={drag ? "layer-chevron layer-handle" : "layer-chevron"}
-          {...drag?.handle}
-          aria-expanded={open}
-          aria-label={drag ? `${layer.name}'s details (drag to move it)` : `${layer.name}'s details`}
-          onClick={onToggle}
-        >
-          <ChevronUpIcon />
-        </button>
+        {/* Its handle, to drag it to another place in the stack; one that can't move keeps the room, so rows line up. */}
+        {drag ? (
+          <button className="layer-chevron layer-handle" {...drag.handle} aria-label={`Move ${layer.name} (drag)`}>
+            <GripIcon />
+          </button>
+        ) : (
+          <span className="layer-chevron layer-end" aria-hidden="true" />
+        )}
       </div>
-      <Reveal open={open}>
-        <SidebarDetails>
-          <Sections layer={layer} on={on} going={going} scene={scene} all={all} editing={editing} onCloned={onCloned} />
-        </SidebarDetails>
-      </Reveal>
+      {/* Always open: what can be done to it, under its row. */}
+      <SidebarDetails>
+        <Sections layer={layer} on={on} going={going} scene={scene} all={all} editing={editing} />
+      </SidebarDetails>
     </li>
   );
-}
-
-/** How many of these lights there are of each kind, color bulbs, old bulbs, then panels ("12 color · 3 old · 4 panels"); none, "0 lights". */
-function kindsText(ids: readonly number[], all: LightInfo[]): string {
-  const of = new Set(ids);
-  let color = 0;
-  let old = 0;
-  let panels = 0;
-  for (const l of all) {
-    if (!of.has(l.id)) continue;
-    if (isBinary(l.type)) old++;
-    else if (baseType(l.type) === "4x1") panels++;
-    else color++;
-  }
-  const parts = [color > 0 && `${color} color`, old > 0 && `${old} old`, panels > 0 && count(panels, "panel")].filter((p): p is string => !!p);
-  return parts.length > 0 ? parts.join(" · ") : "0 lights";
 }
 
 /** The lights with these ids, of all of them. */
@@ -421,7 +394,6 @@ function Sections({
   scene,
   all,
   editing,
-  onCloned,
 }: {
   layer: Layer;
   on: number[];
@@ -429,7 +401,6 @@ function Sections({
   scene: Scene;
   all: LightInfo[];
   editing: boolean;
-  onCloned: (key: string) => void;
 }) {
   const ids = all.map((l) => l.id);
   if (going) {
@@ -469,7 +440,7 @@ function Sections({
       {builtIn && !base && (
         <SidebarSection title={builtIn.name}>
           <div className="shader-actions">
-            <CloneShader layer={layer} scene={scene} all={ids} onCloned={onCloned} />
+            <CloneShader layer={layer} scene={scene} all={ids} />
             {layer.adding ? <AddingActions adding={layer.adding} /> : coming ? <ComingActions instance={layer.instance!} /> : <RemoveShader layer={layer} />}
           </div>
         </SidebarSection>
@@ -482,7 +453,7 @@ function Sections({
             <div className="shader-actions">
               {layer.adding ? (
                 <>
-                  <CloneShader layer={layer} scene={scene} all={ids} onCloned={onCloned} />
+                  <CloneShader layer={layer} scene={scene} all={ids} />
                   <AddingActions adding={layer.adding} />
                 </>
               ) : coming ? (
@@ -490,7 +461,7 @@ function Sections({
               ) : (
                 <>
                   {layer.sketch && <OpenCode sketch={layer.sketch} />}
-                  <CloneShader layer={layer} scene={scene} all={ids} onCloned={onCloned} />
+                  <CloneShader layer={layer} scene={scene} all={ids} />
                   <RemoveShader layer={layer} />
                 </>
               )}

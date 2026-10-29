@@ -21,6 +21,8 @@ export const liveTiming = (): PlayoutStats => playout.stats();
 
 let liveFrame: Frame | null = null;
 let simFrame: Frame | null = null;
+// The preview's whole pipeline (what's pending, with nothing set aside), when what's shown is a peek.
+let fullFrame: Frame | null = null;
 let simulated = false;
 // Peeking at the saved room (peek.ts' SAVED): the room's own frames shown, the preview still running behind them.
 let showingRoom = false;
@@ -40,14 +42,25 @@ export function setSimulated(on: boolean) {
   if (simulated === on) return;
   simulated = on;
   simFrame = null;
+  fullFrame = null;
   if (!on && liveFrame) notify(liveFrame);
 }
 
-export function pushSimFrame(f: Frame) {
+/** The preview's frame to show (a peek's, while peeking), and its whole pipeline (the same, if not peeking). */
+export function pushSimFrame(f: Frame, full: Frame = f) {
   if (!simulated) return;
   simFrame = f;
+  fullFrame = full;
   if (!showingRoom) notify(f);
 }
+
+/**
+ * The pipeline as it is, with nothing set aside: the preview's whole one
+ * while there's a preview (whatever's being peeked at), else the room's. What
+ * the rail's stops show, each the light its own layer makes, so peeking at
+ * one stop (or the saved room) doesn't change the others.
+ */
+export const pipelineFrame = () => (simulated ? (fullFrame ?? simFrame ?? liveFrame) : liveFrame);
 
 /**
  * Show the room's own frames (the saved pipeline, as it runs), whatever's
@@ -83,6 +96,8 @@ export interface FrameSource {
 
 /** The room: live, or the preview of pending edits while there are some. */
 export const roomFrames: FrameSource = { latest: latestFrame, subscribe: onFrame };
+/** Whether a frame source is the room's own (the rail's stops then take its whole pipeline: pipelineFrame). */
+export const isRoomFrames = (f: FrameSource) => f === roomFrames;
 
 const FramesContext = createContext<FrameSource>(roomFrames);
 export const FramesProvider = FramesContext.Provider;

@@ -10,8 +10,8 @@
 //               (the room's Base Tone is one: shared/base-color.ts)
 //   Transition  from the light below to an end tone, eased, at a speed,
 //               back and forth or over again
-//   Rainbow     every hue in turn, across the room, at a speed, brightness
-//               and saturation
+//   Rainbow     a rainbow rolling across the room, in bands or a rose of
+//               petals round its center
 
 import { BASE_COLOR } from "./base-color.ts";
 
@@ -25,9 +25,9 @@ export interface DefaultSketch {
 }
 
 export const DEFAULT_SKETCHES: readonly DefaultSketch[] = [
-  { id: BASE_COLOR.sketch, name: BASE_COLOR.name, about: "A color for each light", entry: "tone" },
-  { id: "b45e0c01-0000-4000-8000-000000000004", name: "Transition", about: "From the light below to an end tone, and back or again", entry: "transition" },
-  { id: "b45e0c01-0000-4000-8000-000000000005", name: "Rainbow", about: "Every hue in turn, across the room", entry: "rainbow" },
+  { id: BASE_COLOR.sketch, name: BASE_COLOR.name, about: "Set the color, brightness, and fidelity.", entry: "tone" },
+  { id: "b45e0c01-0000-4000-8000-000000000004", name: "Transition", about: "Move between the previous color and a target color.", entry: "transition" },
+  { id: "b45e0c01-0000-4000-8000-000000000005", name: "Rainbow", about: "Rotate the hue over time.", entry: "rainbow" },
 ];
 
 /** A default sketch, by its id. */

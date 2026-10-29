@@ -298,7 +298,7 @@ function Wheel(props: PickerProps) {
     return null;
   };
   return (
-    <Picker {...props} className="wheel-picker" width={props.size} height={props.size} at={wheelPlace} colorAt={colorAt} step={step} label="Color">
+    <Picker {...props} className="wheel-picker" width={props.size} height={props.size} at={wheelPlace} colorAt={colorAt} step={step} label="Hue">
       <canvas key={props.gamut} ref={canvas} style={{ width: props.size, height: props.size }} aria-hidden="true" />
     </Picker>
   );

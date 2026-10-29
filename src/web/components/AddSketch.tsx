@@ -9,7 +9,7 @@
 // that name. Deleted sketches are another view of the dialog, swapped in
 // (and back) by the button beside its close: each to restore.
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { DEFAULT_SKETCHES, defaultSketch } from "../../shared/default-sketches.ts";
 import type { Sketch } from "../../shared/vibes.ts";
 import { useCreateSketch, useDeletedSketches, useDeleteSketch, useForkSketch, useRenameSketch, useRestoreSketch, useSketches } from "../api.ts";
@@ -144,8 +144,7 @@ export function AddSketch({ open, onPick, onClose }: Props) {
           ) : (
             <>
               {defaults.length > 0 && (
-                <section className="add-sketch-section">
-                  <h3 className="label">Default Sketches</h3>
+                <LibrarySection title="Default Sketches" about="Built into vibes, ready to add.">
                   <ul className="add-sketch-grid">
                     {defaults.map((s) => (
                       <li key={s.id}>
@@ -153,44 +152,70 @@ export function AddSketch({ open, onPick, onClose }: Props) {
                       </li>
                     ))}
                   </ul>
-                </section>
+                </LibrarySection>
               )}
-              {defaults.length > 0 && <h3 className="label add-sketch-section-head">Sketches</h3>}
-              <ul className="add-sketch-grid">
-                {list.map((s) => (
-                  <li key={s.id}>
-                    <Card sketch={s} onAdd={() => onPick({ id: s.id, name: s.name })} />
+              <LibrarySection
+                title="User Sketches"
+                about="Made by recursers. Edit, fork, or make your own!"
+                action={
+                  // Naming a new one, in the grid's last card (as that card's own button does).
+                  <button className="quiet add-sketch-section-action" onClick={() => setNaming(naming ?? query.trim())} disabled={create.isPending}>
+                    <PlusIcon /> New sketch
+                  </button>
+                }
+              >
+                <ul className="add-sketch-grid">
+                  {list.map((s) => (
+                    <li key={s.id}>
+                      <Card sketch={s} onAdd={() => onPick({ id: s.id, name: s.name })} />
+                    </li>
+                  ))}
+                  {/* A new one, last: a skeleton of a card, named here. */}
+                  <li>
+                    {naming === null ? (
+                      <button className="add-sketch-item add-sketch-new" onClick={() => setNaming(query.trim())}>
+                        <PlusIcon />
+                        <span className="add-sketch-name">New sketch</span>
+                        <span className="add-sketch-meta">A slow wave to start from</span>
+                      </button>
+                    ) : (
+                      <form className="add-sketch-item add-sketch-new naming" onSubmit={submit}>
+                        <input autoFocus placeholder="Its name" value={naming} maxLength={80} onChange={(e) => setNaming(e.target.value)} />
+                        <div className="add-sketch-naming-actions">
+                          <button className="quiet" type="button" onClick={() => setNaming(null)}>
+                            Cancel
+                          </button>
+                          <button className="primary" type="submit" disabled={!naming.trim() || create.isPending}>
+                            Make it
+                          </button>
+                        </div>
+                      </form>
+                    )}
                   </li>
-                ))}
-                {/* A new one, last: a skeleton of a card, named here. */}
-                <li>
-                  {naming === null ? (
-                    <button className="add-sketch-item add-sketch-new" onClick={() => setNaming(query.trim())}>
-                      <PlusIcon />
-                      <span className="add-sketch-name">New sketch</span>
-                      <span className="add-sketch-meta">A slow wave to start from</span>
-                    </button>
-                  ) : (
-                    <form className="add-sketch-item add-sketch-new naming" onSubmit={submit}>
-                      <input autoFocus placeholder="Its name" value={naming} maxLength={80} onChange={(e) => setNaming(e.target.value)} />
-                      <div className="add-sketch-naming-actions">
-                        <button className="quiet" type="button" onClick={() => setNaming(null)}>
-                          Cancel
-                        </button>
-                        <button className="primary" type="submit" disabled={!naming.trim() || create.isPending}>
-                          Make it
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </li>
-              </ul>
+                </ul>
+              </LibrarySection>
             </>
           )}
         </div>
         {create.isError && <p className="error-text">{create.error.message}</p>}
       </div>
     </dialog>
+  );
+}
+
+/** A section of the library: a rule across, its title and what's in it, then its cards. */
+function LibrarySection({ title, about, action, children }: { title: string; about: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="add-sketch-section">
+      <div className="add-sketch-section-head">
+        <div className="add-sketch-section-text">
+          <h3 className="add-sketch-section-title">{title}</h3>
+          <p className="add-sketch-section-about">{about}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }
 

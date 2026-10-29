@@ -92,6 +92,13 @@ export const ChevronUpIcon = () => (
   </Svg>
 );
 
+/** Six dots in two columns: a handle to drag something by. */
+export const GripIcon = () => (
+  <Svg width="12" height="12" strokeWidth="0" fill="currentColor">
+    {[5.5, 10.5].flatMap((x) => [3.5, 8, 12.5].map((y) => <circle key={`${x},${y}`} cx={x} cy={y} r="1.25" />))}
+  </Svg>
+);
+
 /** A pencil, for editing (renaming). */
 export const PencilIcon = () => (
   <Svg>

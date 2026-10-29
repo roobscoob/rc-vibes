@@ -222,9 +222,11 @@ lights where they are, as free lights. vibes keeps its rail changes in the
      sketches, in a section of their own at the top of the library: Tone,
      and Transition (each color light from the light below it to an End tone,
      with Easing, Speed in transitions a second, and Reverse: back and forth,
-     or over again from the start), and Rainbow (every hue in turn, a wave
-     across the room, with Speed in times round a minute, Brightness in
-     lumens, and Saturation against what the bulbs make of each hue). Each is built with vibes
+     or over again from the start), and Rainbow (a rainbow rolling across the room:
+     Zoom, Speed, and Petals to bend its bands into a rose round the room's
+     center; each light keeps the brightness and fidelity of the light below
+     it, its hue turning, and as much of the light below's saturation as the
+     bulbs make of each hue at that brightness). Each is built with vibes
      (`src/default-sketches/<entry>.ts`, to `dist/default-sketches/`) and
      made as vibes starts (`server/default-sketches.ts`), one build each; the
      sketches API answers a build of one with it, and there's no code of one

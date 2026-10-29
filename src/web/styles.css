@@ -81,8 +81,6 @@
   /* A layer's lights alone (focus) or its domain being edited: cool, so it never reads as a light. */
   --focus: #8fb9ff;
   --focus-ink: #0b1424;
-  /* The room's average color right now (set by the brand's glow). */
-  --room: rgb(60 56 50);
   --plan-line: #302e2b;
   --plan-text: #57534e;
   --blur: blur(22px) saturate(1.5);
@@ -423,10 +421,6 @@ kbd {
   cursor: pointer;
 }
 
-.tag-chips .chip svg {
-  margin: 0 -2px 0 -4px;
-}
-
 /* The account, over the top right. */
 .hud .avatar {
   width: 36px;
@@ -660,6 +654,8 @@ kbd {
   flex: none;
   align-items: center;
   gap: 10px;
+  /* As tall as its buttons (.icon-button) whether they're there or not, so the title doesn't move as they come and go. */
+  min-height: calc(30px + 16px + 14px);
   padding: 16px 12px 14px 18px;
 }
 
@@ -789,7 +785,7 @@ kbd {
 
 /* What the selection looks like, in a card in the map's top left (under the
    HUD, over the map tools), while its button in the bottom-right corner is on, like a car's
-   instruments: White · Color over the wheel (or the white field), and under
+   instruments: White · Hue over the white field (or the wheel), and under
    it, rows alike for brightness and fidelity (ticks along tracks) and old
    bulbs (one bar), as wide as the wheel's box. */
 .look-card {
@@ -1105,7 +1101,8 @@ kbd {
   padding-left: 10px;
 }
 
-.layer > .reveal {
+.layer > .reveal,
+.layer > .layer-details {
   grid-row: 2;
   grid-column: 2;
   /* Its clip reaches back over the gap toward the rail, so what it shows can
@@ -1171,10 +1168,10 @@ kbd {
 
 .layer-glow {
   position: absolute;
-  inset: -1px;
+  inset: -1.5px;
   border-radius: 50%;
-  filter: blur(4px);
-  opacity: 0.5;
+  filter: blur(4.5px);
+  opacity: 0.75;
   pointer-events: none;
 }
 
@@ -1212,14 +1209,23 @@ kbd {
   background: var(--fill);
 }
 
-/* Lifted while it's dragged to another place: solid, over the hover's
-   light (the pointer's on its head the whole drag), whether it's open or not. */
+/* Lifted while it's dragged to another place: the whole row in the head's
+   own light (as hovering lights the head), over solid ground, so it's the
+   same all over, with the pointer on it or off it. Its head and rail take
+   that light from the row, not one of their own on top. */
 .layer.dragging,
 .layer.dragging:has(> .layer-head.toggle) {
   position: relative;
   z-index: 2;
-  background: var(--solid-2);
+  background: linear-gradient(var(--fill), var(--fill)), var(--solid-2);
   box-shadow: 0 14px 32px rgb(0 0 0 / 0.5);
+}
+
+.layer.dragging > .layer-rail,
+.layer.dragging > .layer-head,
+.layer.open.dragging:has(> .layer-head.toggle:hover) > .layer-rail,
+.layer.open.dragging:has(> .layer-head.toggle:hover) > .layer-head {
+  background: none;
 }
 
 /* In the sketches panel, a row's chevron is the handle to drag it by. */
@@ -1475,14 +1481,52 @@ kbd {
 }
 
 /* Like the library's cards (sketches.css), a little smaller. */
-/* The library's sections: vibes' own (Default Sketches) first, then everyone's. */
-.add-sketch-section {
-  margin-bottom: 20px;
+/* The library's sections, vibes' own (Default Sketches) then everyone's
+   (User Sketches): each under a hairline across, with its title and a line
+   saying what's in it. */
+.add-sketch-section + .add-sketch-section {
+  margin-top: 22px;
 }
 
-.add-sketch-section > .label,
 .add-sketch-section-head {
-  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* Its title: the app's own type, in white, so the sections stand out. */
+.add-sketch-section-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.add-sketch-section-text {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* A section's own button (User Sketches' New sketch), at the right of its head. */
+button.quiet.add-sketch-section-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.add-sketch-section-about {
+  margin: 0;
+  color: var(--mute);
+  font-size: 12px;
 }
 
 .add-sketch-grid {
@@ -2468,6 +2512,7 @@ button.layer-chevron:hover {
 
   /* Room above for the grabber, in the head itself, so its title and buttons still center on each other. */
   .sidebar-head {
+    min-height: calc(30px + 20px + 14px);
     padding-top: 20px;
     touch-action: none;
     user-select: none;
@@ -2504,26 +2549,11 @@ button.layer-chevron:hover {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-}
-
-.room-glow {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--room);
-  box-shadow:
-    0 0 14px 2px var(--room),
-    inset 0 0 0 1px rgb(255 255 255 / 0.2);
-  transition:
-    background 0.4s,
-    box-shadow 0.4s;
 }
 
 .wordmark {
-  font-size: 22px;
+  display: block;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.035em;
   line-height: 1;
@@ -2996,17 +3026,6 @@ button.layer-chevron:hover {
   color: var(--on-ink);
   font-weight: 650;
   cursor: default;
-}
-
-/* A hand-picked selection's chip clears it. */
-.chip.on:has(svg) {
-  cursor: pointer;
-}
-
-.chip svg {
-  width: 12px;
-  height: 12px;
-  margin-right: -3px;
 }
 
 .field-head {

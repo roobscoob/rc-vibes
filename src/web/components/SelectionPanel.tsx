@@ -40,7 +40,7 @@ import {
   type SwitchState,
 } from "../draft.ts";
 import { ChevronUpIcon, CloseIcon, SaveIcon, UndoIcon } from "../icons.tsx";
-import { useFrames } from "../live.ts";
+import { isRoomFrames, pipelineFrame, useFrames } from "../live.ts";
 import { peek, ROOM_TONE, SAVED } from "../peek.ts";
 import { useNarrow } from "../narrow.ts";
 import { useLights, useScene, type Scene } from "../scene.ts";
@@ -377,22 +377,11 @@ export function ChangesMark({ changed, here, onSelect }: { changed: readonly num
 }
 
 /** The groups of lights here (all of them, the main space, each tag), to select and let go of. */
-function Groups({
-  here,
-  selected,
-  onSelect,
-  hint,
-}: {
-  here: LightInfo[];
-  selected: ReadonlySet<number>;
-  onSelect: Props["onSelect"];
-  hint?: string;
-}) {
+function Groups({ here, selected, onSelect }: { here: LightInfo[]; selected: ReadonlySet<number>; onSelect: Props["onSelect"] }) {
   if (here.length === 0) return null;
   return (
     <section className="panel-groups">
       <TagChips lights={here} selected={selected} onSelect={onSelect} />
-      {hint && <p className="hint">{hint}</p>}
     </section>
   );
 }
@@ -423,7 +412,7 @@ export function IdlePanel({
       }
       actions={<SaveButtons save={save} />}
     >
-      <Groups here={here} selected={selected} onSelect={onSelect} hint="Pick a group, or lights on the map, to see what's on them." />
+      <Groups here={here} selected={selected} onSelect={onSelect} />
     </Sidebar>
   );
 }
@@ -536,6 +525,8 @@ function toneColors(lights: LightInfo[], template: Record<string, Channels>, gam
 export function ShaderNode({ layer, lights, hollow }: { layer: Layer; lights: LightInfo[]; hollow: boolean }) {
   const gamut = useGamut();
   const frames = useFrames();
+  // The room's whole pipeline, not what the map shows: peeking at a stop (or the saved room) sets layers aside there, not here.
+  const latest = isRoomFrames(frames) ? pipelineFrame : () => frames.latest();
   const peekable = usePeekable(layer.script !== "" ? layer.key : null);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -543,7 +534,7 @@ export function ShaderNode({ layer, lights, hollow }: { layer: Layer; lights: Li
     const t = window.setInterval(() => tick((n) => n + 1), 1000);
     return () => window.clearInterval(t);
   }, [hollow]);
-  const frame = frames.latest();
+  const frame = latest();
   // Just the lights it's on: masked off the rest, their light isn't its.
   const on = new Set(domainOf(layer));
   const colors = new Set<string>();

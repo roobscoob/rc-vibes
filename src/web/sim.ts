@@ -82,6 +82,40 @@ export function applyLayer(
   return { state: layer.mask.length > 0 ? mergeOutput(state, lights, out, new Set(layer.mask)) : unmasked, trying };
 }
 
+/**
+ * The room built from the bottom of the stack up (`layers` lists the top
+ * first), each layer's output from `call` (null: it passes its input on). The
+ * whole pipeline (`full`), what the map shows (`shown`: the light as it leaves
+ * the stop under the top `peekAbove` layers, which still run, so the whole
+ * pipeline's there for the rail's stops), and each layer's lights it tried to
+ * change. Null if it's stopped part way (`going` false).
+ */
+export async function runPipeline(
+  lights: LightInfo[],
+  layers: readonly Layer[],
+  template: Record<string, Channels>,
+  peekAbove: number,
+  call: (layer: Layer, state: RoomState) => Promise<unknown>,
+  going: () => boolean = () => true,
+): Promise<{ full: RoomState; shown: RoomState; trying: Map<LayerKey, number[]> } | null> {
+  let state = baseState(lights, template);
+  const bottomUp = [...layers].reverse();
+  const peekAt = bottomUp.length - Math.min(Math.max(0, peekAbove), bottomUp.length);
+  let shown: RoomState | null = peekAbove > 0 && peekAt === 0 ? state : null;
+  const trying = new Map<LayerKey, number[]>();
+  for (const [i, layer] of bottomUp.entries()) {
+    const out = await call(layer, state);
+    if (!going()) return null;
+    if (out) {
+      const step = applyLayer(state, lights, out, layer);
+      trying.set(layer.key, step.trying);
+      state = step.state;
+    }
+    if (peekAbove > 0 && i + 1 === peekAt) shown = state;
+  }
+  return { full: state, shown: shown ?? state, trying };
+}
+
 // ---- workers ----------------------------------------------------------------
 
 class ShaderWorker {
@@ -209,6 +243,13 @@ interface Inputs {
   lights: LightInfo[];
   layers: Layer[];
   template: Record<string, Channels>;
+  /**
+   * Peeking: how many of the layers, from the top, to set aside for what the
+   * map shows (the light as it leaves the stop under them). Every layer still
+   * runs, and the whole pipeline is what the rail's stops show (pushSimFrame's
+   * `full`), so peeking at one stop doesn't change the others.
+   */
+  peekAbove?: number;
 }
 
 class Simulation {
@@ -284,22 +325,26 @@ class Simulation {
     if (!this.running) return;
     const started = performance.now();
     const now = Date.now();
-    const { lights, layers, template } = this.inputs;
-    let state = baseState(lights, template);
-    // The stack lists the top first; the room is built from the bottom up.
-    for (const layer of [...layers].reverse()) {
-      const w = this.workers.get(layer.key);
-      if (!w || w.stopped) continue;
-      const out = await w.call(prevOf(state, lights, now), now, now);
-      if (!this.running) return;
-      if (!out) continue;
-      const step = applyLayer(state, lights, out, layer);
-      let marks = this.seen.get(layer.key);
-      if (!marks) this.seen.set(layer.key, (marks = new Map()));
-      for (const id of step.trying) marks.set(id, now);
-      state = step.state;
+    const { lights, layers, template, peekAbove = 0 } = this.inputs;
+    const run = await runPipeline(
+      lights,
+      layers,
+      template,
+      peekAbove,
+      async (layer, state) => {
+        const w = this.workers.get(layer.key);
+        if (!w || w.stopped) return null;
+        return w.call(prevOf(state, lights, now), now, now);
+      },
+      () => this.running,
+    );
+    if (!run) return;
+    for (const [key, trying] of run.trying) {
+      let marks = this.seen.get(key);
+      if (!marks) this.seen.set(key, (marks = new Map()));
+      for (const id of trying) marks.set(id, now);
     }
-    pushSimFrame({ initialTime: now, lights: state });
+    pushSimFrame({ initialTime: now, lights: run.shown }, { initialTime: now, lights: run.full });
     this.publish(now);
     this.timer = window.setTimeout(() => void this.tick(), Math.max(0, TICK_MS - (performance.now() - started)));
   }
