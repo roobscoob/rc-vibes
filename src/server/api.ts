@@ -29,6 +29,8 @@ import { createPresence, type PresenceHub } from "./presence.ts";
 import type { SceneFeedSource } from "./scene-feed.ts";
 import { createShaders, Refused, shaderRoutes } from "./shaders.ts";
 import type { ScenesSource } from "./scenes.ts";
+import type { ShowTimeline } from "./show-timeline.ts";
+import { createTimelinePlayer, type PlayingRef } from "./timeline-player.ts";
 import { createShowApply } from "./show-apply.ts";
 import type { Show } from "./show.ts";
 import type { StreamRelay } from "./stream.ts";
@@ -68,6 +70,9 @@ export interface ApiDeps {
   show?: Show | null;
   /** The scenes, for pages to change (scenes.ts). */
   scenes?: ScenesSource | null;
+  /** The show's timeline, for pages to change (show-timeline.ts); played here (timeline-player.ts), and `playing` pointed at it. */
+  timeline?: ShowTimeline | null;
+  playing?: PlayingRef | null;
   /** Who's here (shared/presence.ts); without it, one of its own. */
   presence?: PresenceHub;
 }
@@ -177,7 +182,7 @@ const badBody = (result: { success: boolean; error?: unknown }, c: Context) => {
   }
 };
 
-export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, live, pools, layout, sketches, instances = null, health = null, rtime = null, show = null, scenes = null, presence = createPresence() }: ApiDeps) {
+export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, live, pools, layout, sketches, instances = null, health = null, rtime = null, show = null, scenes = null, timeline = null, playing = null, presence = createPresence() }: ApiDeps) {
   const api = new Hono<AuthEnv>();
   api.onError(handleError);
   // Browsers already refuse cross-site JSON requests without CORS headers,
@@ -240,6 +245,10 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
   // Scenes applied in a show, on its clock (show-apply.ts).
   const showApply =
     show && scenes && rtime ? createShowApply({ show, scenes, room: () => live.tree(), shaders, arclamp, pools, db, rNow: rtime.rNow }) : null;
+  // The show's timeline played (timeline-player.ts).
+  const player =
+    show && scenes && timeline && rtime ? createTimelinePlayer({ show, timeline, scenes, room: () => live.tree(), shaders, arclamp, pools, rNow: rtime.rNow }) : null;
+  if (player && playing) playing.changed = () => void player.changed();
   // Pages' updates to the live state (over the room socket).
   const updates = createUpdates({
     shaders,
@@ -251,6 +260,7 @@ export function apiRoutes({ config, arclamp, db, relay, origins, lights, feed, l
     show,
     scenes,
     showApply,
+    timeline,
     logParam(pool, name, lights, user) {
       // A param of a shader in the room (its instance's pool), in the history: a drag's run as one.
       const owner = pools.get(pool)?.owner ?? "";

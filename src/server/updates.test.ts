@@ -214,6 +214,33 @@ describe("updates made together", () => {
     }
   });
 
+  it("make each change to the timeline, in order: a block put there whole, or taken away", () => {
+    const S = "00000000-0000-4000-8000-000000000001";
+    const B = "00000000-0000-4000-8000-0000000000b1";
+    const a = parseOps([
+      [`timeline/blocks/${B}`, { scene: S, row: 1, start: 0, end: 16 }],
+      [`timeline/blocks/${B}`, { scene: S, row: 0, start: 4, end: 16 }],
+      [`timeline/blocks/${B}`, null],
+      [`timeline/blocks/${B}`],
+    ]);
+    expect(a.blocks).toEqual([
+      { op: "put", id: B, scene: S, row: 1, start: 0, end: 16 },
+      { op: "put", id: B, scene: S, row: 0, start: 4, end: 16 },
+      { op: "remove", id: B },
+      { op: "remove", id: B },
+    ]);
+    expect(mergeBatches(a, parseOps([[`timeline/blocks/${B}`]])).blocks).toHaveLength(5);
+    for (const op of [
+      ["timeline/blocks/not-a-uuid", { scene: S, row: 0, start: 0, end: 4 }],
+      [`timeline/blocks/${B}`, { scene: "x", row: 0, start: 0, end: 4 }],
+      [`timeline/blocks/${B}`, { scene: S, row: 0.5, start: 0, end: 4 }],
+      [`timeline/blocks/${B}/start`, 4],
+      ["timeline/elsewhere", 1],
+    ] as Op[]) {
+      expect(() => parseOps([op]), JSON.stringify(op)).toThrow(/timeline/);
+    }
+  });
+
   it("have a color's numbers over the color before them, path by path, within an update and across them", () => {
     const tint = (light: number) => `pools/${P}/values/tint/${light}`;
     const c = { a: 0.1, b: 0.2, lm: 500, fidelity: 1 };

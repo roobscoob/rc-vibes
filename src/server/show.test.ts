@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Op } from "../shared/live.ts";
 import { restingClock, type ShowClock } from "../shared/show.ts";
+import { PARKED } from "../shared/show-timeline.ts";
 import type { Me } from "../shared/vibes.ts";
 import { openDb, type Db } from "./db.ts";
 import { Refused } from "./shaders.ts";
@@ -33,7 +34,7 @@ describe("the show, as vibes keeps it", () => {
 
   it("starts with no show on, resting", () => {
     expect(make().clock()).toEqual(restingClock(T));
-    expect(make().tree()).toEqual({ on: false, clock: restingClock(T), cue: "now", queued: null });
+    expect(make().tree()).toEqual({ on: false, clock: restingClock(T), cue: "now", queued: null, playhead: PARKED });
   });
 
   it("keeps how scenes come in as the show says, told to everyone; and, not kept, the one waiting for its frame", () => {
@@ -67,6 +68,7 @@ describe("the show, as vibes keeps it", () => {
     expect(published).toEqual([
       ["show/on", true],
       ["show/clock", started],
+      ["show/playhead", { pos: 0, at: T + 1000, lock: null }],
     ]);
     expect(told).toEqual([started]);
     show.act({ do: "play", at: T + 1500 }, ada);
@@ -78,6 +80,7 @@ describe("the show, as vibes keeps it", () => {
     expect(published).toEqual([
       ["show/on", false],
       ["show/clock", ended],
+      ["show/playhead", { pos: 0, at: T + 2000, lock: null }],
     ]);
     expect((await db.activity(10)).map((a) => a.detail)).toEqual([{ do: "end" }, { do: "play" }, { do: "start" }]);
   });
@@ -89,7 +92,12 @@ describe("the show, as vibes keeps it", () => {
     told = [];
     const playing = show.act({ do: "play", at: T + 40 }, ada);
     expect(playing).toMatchObject({ playing: true, at: T + 40, t: 0 });
-    expect(published).toEqual([["show/clock", playing]]);
+    // The timeline's playhead plays with it, from bar 1.
+    expect(show.tree().playhead).toMatchObject({ pos: 0, at: T + 40, lock: { next: expect.any(Number) } });
+    expect(published).toEqual([
+      ["show/clock", playing],
+      ["show/playhead", show.tree().playhead],
+    ]);
     expect(told).toEqual([playing]);
     show.act({ do: "tempo", at: T, bpm: 120, onBeat: true }, ada);
     show.act({ do: "tempo", at: T + 500, bpm: 121, onBeat: true }, ada);
@@ -118,7 +126,7 @@ describe("the show, as vibes keeps it", () => {
   });
 
   it("rests if what's saved isn't a show", () => {
-    const resting = { on: false, clock: restingClock(T), cue: "now", queued: null };
+    const resting = { on: false, clock: restingClock(T), cue: "now", queued: null, playhead: PARKED };
     db.setSetting("show", '{"on":true,"clock":{"playing":"yes"}}');
     expect(make().tree()).toEqual(resting);
     db.setSetting("show", "not json");

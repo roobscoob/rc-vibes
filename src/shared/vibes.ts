@@ -266,7 +266,8 @@ export type ActivityAction =
   | "streetview.move"
   | "show.clock"
   | "scenes.change"
-  | "scenes.apply";
+  | "scenes.apply"
+  | "timeline.change";
 
 export interface ActivityEntry {
   id: number;

@@ -32,6 +32,7 @@ import { COLOR_PARTS, PARAM_NAME, type ColorPart, type ParamSpec, type ParamValu
 import { RAIL_ID, type RailShape } from "../shared/rails.ts";
 import { MAX_SCENE_NAME, MAX_SCENES, type SceneOp } from "../shared/scenes.ts";
 import { CUE_MODES, type TransportAction } from "../shared/show.ts";
+import type { BlockOp } from "../shared/show-timeline.ts";
 import { MAX_TAGS, TAG } from "../shared/tags.ts";
 import type { Me, Placement, ShaderKey, Spot } from "../shared/vibes.ts";
 import { ArclampError } from "./arclamp.ts";
@@ -42,6 +43,7 @@ import { declarationsOf } from "./params.ts";
 import { anyValue, ColorPatch, laterChange, type LightChange, type Pools } from "./pools.ts";
 import type { ScenesSource } from "./scenes.ts";
 import type { ShowApply } from "./show-apply.ts";
+import type { ShowTimeline } from "./show-timeline.ts";
 import { Refused, type Shaders } from "./shaders.ts";
 import type { Show } from "./show.ts";
 
@@ -56,6 +58,8 @@ const sceneId = z.string().regex(POOL_ID);
 const sceneName = z.string().trim().min(1).max(MAX_SCENE_NAME);
 const paramValue = z.custom<ParamValue>((v) => anyValue(v) !== null).transform((v) => anyValue(v)!);
 const sceneKnobs = z.record(z.string().regex(PARAM_NAME), z.record(z.string().regex(LIGHT), paramValue));
+// A block on the timeline (shared/show-timeline.ts): whether its row and span will do is show-timeline.ts's to say.
+const block = z.object({ scene: sceneId, row: z.number().int(), start: z.number().finite(), end: z.number().finite() });
 const ids = z.array(z.number().int()).max(2000);
 const point = z.object({ mm_x: z.number().finite(), mm_y: z.number().finite() });
 const addSpec: z.ZodType<AddSpec> = z.object({
@@ -108,6 +112,8 @@ export interface Batch {
   scenes: SceneOp[];
   /** Scenes applied in a show, on its clock, in order (show-apply.ts): pressed at `at`, arclamp's time. */
   applies: { scene: string; at: number }[];
+  /** Done to the show's timeline, in order (shared/show-timeline.ts). */
+  blocks: BlockOp[];
   note: string | undefined;
   /** Nothing to change: just answered once the tree's up to date (a page that wants to be sure it is). */
   sync: boolean;
@@ -128,6 +134,7 @@ const emptyBatch = (): Batch => ({
   transport: [],
   scenes: [],
   applies: [],
+  blocks: [],
   note: undefined,
   sync: false,
 });
@@ -256,6 +263,13 @@ export function parseOps(ops: readonly Op[], note?: string): Batch {
         } else throw bad(path);
         break;
       }
+      case "timeline": {
+        const id = k[2];
+        if (k.length !== 3 || k[1] !== "blocks" || !id || !sceneId.safeParse(id).success) throw bad(path);
+        if (set && v !== null) b.blocks.push({ op: "put", id, ...check(block, v, path) });
+        else b.blocks.push({ op: "remove", id });
+        break;
+      }
       default:
         throw bad(path);
     }
@@ -291,6 +305,7 @@ export function mergeBatches(a: Batch, b: Batch): Batch {
   out.transport = [...a.transport, ...b.transport];
   out.scenes = [...a.scenes, ...b.scenes];
   out.applies = [...a.applies, ...b.applies];
+  out.blocks = [...a.blocks, ...b.blocks];
   out.note = b.note ?? a.note;
   out.sync = a.sync && b.sync;
   return out;
@@ -352,9 +367,11 @@ export interface UpdateDeps {
   scenes?: Pick<ScenesSource, "act"> | null;
   /** Scenes applied in a show (show-apply.ts); without it, none can be. */
   showApply?: Pick<ShowApply, "apply"> | null;
+  /** The show's timeline (show-timeline.ts); without it, nothing can be put on one. */
+  timeline?: Pick<ShowTimeline, "act"> | null;
 }
 
-export function createUpdates({ shaders, instances, pools, layout, setRoomtone, shown, logParam = () => {}, show = null, scenes = null, showApply = null }: UpdateDeps) {
+export function createUpdates({ shaders, instances, pools, layout, setRoomtone, shown, logParam = () => {}, show = null, scenes = null, showApply = null, timeline = null }: UpdateDeps) {
   const roomtone = latest<Record<string, Channels>>(
     async (lights, user, note) => void (await setRoomtone(lights, user, note)),
     (a, b) => {
@@ -489,6 +506,10 @@ export function createUpdates({ shaders, instances, pools, layout, setRoomtone, 
     for (const a of b.applies) {
       if (!showApply) throw new Unmade("no_show", "scenes can't go on a show's clock here", made);
       await step(() => showApply.apply(a.scene, a.at, user));
+    }
+    for (const o of b.blocks) {
+      if (!timeline) throw new Unmade("no_timeline", "there's no timeline here", made);
+      await step(async () => timeline.act(o, user));
     }
     return { made, scene: scene || b.sync };
   }

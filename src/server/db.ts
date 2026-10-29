@@ -13,6 +13,7 @@ import type { ParamSpec, ParamValue } from "../shared/params.ts";
 import { DatabaseSync } from "node:sqlite";
 import type { RailShape } from "../shared/rails.ts";
 import type { Scene } from "../shared/scenes.ts";
+import type { Block } from "../shared/show-timeline.ts";
 import type { CameraView, Me, Person, Spot } from "../shared/vibes.ts";
 import { backgroundStore } from "./db-background.ts";
 import { createHistory, memoryStore } from "./history.ts";
@@ -193,6 +194,18 @@ export function openDb(path: string, { background = false }: { background?: bool
       by_name TEXT NOT NULL,
       at INTEGER NOT NULL
     );
+    -- The show's timeline (show-timeline.ts): scenes on it, each block on a
+    -- row, from its start to its end, in beats from bar 1's first.
+    CREATE TABLE IF NOT EXISTS timeline_blocks (
+      id TEXT PRIMARY KEY,
+      scene TEXT NOT NULL,
+      row INTEGER NOT NULL,
+      start_beat REAL NOT NULL,
+      end_beat REAL NOT NULL,
+      by_id TEXT NOT NULL,
+      by_name TEXT NOT NULL,
+      at INTEGER NOT NULL
+    );
   `);
 
   const placementColumns = db.prepare("PRAGMA table_info(placements)").all() as { name: string }[];
@@ -327,6 +340,13 @@ export function openDb(path: string, { background = false }: { background?: bool
   `);
   const deleteScene = db.prepare("DELETE FROM scenes WHERE id = ?");
   const setScenePosition = db.prepare("UPDATE scenes SET position = ? WHERE id = ?");
+  const selectBlocks = db.prepare("SELECT * FROM timeline_blocks ORDER BY start_beat, id");
+  const upsertBlock = db.prepare(`
+    INSERT INTO timeline_blocks (id, scene, row, start_beat, end_beat, by_id, by_name, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET scene = excluded.scene, row = excluded.row, start_beat = excluded.start_beat, end_beat = excluded.end_beat,
+      by_id = excluded.by_id, by_name = excluded.by_name, at = excluded.at
+  `);
+  const deleteBlock = db.prepare("DELETE FROM timeline_blocks WHERE id = ?");
 
   // Nests: an inner transaction just joins the outer one.
   let depth = 0;
@@ -636,6 +656,20 @@ export function openDb(path: string, { background = false }: { background?: bool
     /** The scenes put in this order (any not named keep theirs, after). */
     orderScenes(ids: readonly string[]) {
       transaction(() => ids.forEach((id, i) => setScenePosition.run(i + 1, id)));
+    },
+
+    /** The timeline's blocks. */
+    blocks(): ({ id: string } & Block)[] {
+      const rows = selectBlocks.all() as { id: string; scene: string; row: number; start_beat: number; end_beat: number; by_id: string; by_name: string; at: number }[];
+      return rows.map((r) => ({ id: r.id, scene: r.scene, row: r.row, start: r.start_beat, end: r.end_beat, by: { id: r.by_id, name: r.by_name }, at: r.at }));
+    },
+
+    saveBlock(id: string, b: Block) {
+      upsertBlock.run(id, b.scene, b.row, b.start, b.end, b.by.id, b.by.name, b.at);
+    },
+
+    removeBlock(id: string) {
+      deleteBlock.run(id);
     },
 
     /** Closed, and its history once that's kept (its thread's last checkpoint with it). */

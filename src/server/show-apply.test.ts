@@ -4,6 +4,7 @@ import type { Pool } from "../shared/live.ts";
 import type { ParamSpec } from "../shared/params.ts";
 import type { Scene } from "../shared/scenes.ts";
 import type { ShowState } from "../shared/show.ts";
+import { PARKED } from "../shared/show-timeline.ts";
 import type { Me, Shader } from "../shared/vibes.ts";
 import type { Schedule } from "./arclamp.ts";
 import { Refused } from "./shaders.ts";
@@ -50,7 +51,7 @@ describe("a scene applied in a show", () => {
     vi.useFakeTimers();
     now = T;
     // 120 BPM, beat 8 at T: a bar's first beat (12) at T + 2000.
-    state = { on: true, clock: { playing: true, at: T, t: 0, bpm: 120, beat: 8, nudge: 0 }, cue: "now", queued: null };
+    state = { on: true, clock: { playing: true, at: T, t: 0, bpm: 120, beat: 8, nudge: 0 }, cue: "now", queued: null, playhead: PARKED };
     shaders = { a: shader("a", { muted: true, pool: "pa" }), b: shader("b"), base: shader("base", { pool: BASE_COLOR.pool }) };
     pools = { pa: { declared: [speed], values: { speed: { "1": 3 } } } as unknown as Pool };
     const scene = (s: Scene["shaders"]): Scene => ({ name: "s", shaders: s, by: { id: "u", name: "U" }, at: 0 });

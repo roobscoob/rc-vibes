@@ -1,13 +1,16 @@
 // The show (shared/show.ts): one for the room, kept here, in the live tree
-// (show/on, show/clock), and saved, so a vibes that starts again carries on
-// with it (arclamp's time goes on meanwhile: a playing piece is further in).
-// Pages act on it (show/transport, made by updates.ts); each action is a
-// new anchor, told to every page (the tree) and every sketch (onClock: its
-// stream, params.ts), and noted in the history, a run of the same action
+// (show/on, show/clock, show/playhead), and saved, so a vibes that starts
+// again carries on with it (arclamp's time goes on meanwhile: a playing piece
+// is further in). Pages act on it (show/transport, made by updates.ts); each
+// action is a new anchor, the timeline's playhead moved with it
+// (shared/show-timeline.ts), told to every page (the tree), every sketch
+// (onClock: its stream, params.ts) and the timeline playing (onChange), and
+// noted in the history, a run of the same action
 // (taps, say) as one entry. With no show on, the clock rests, and only
 // starting one does anything.
 
 import { CUE_MODES, MAX_BPM, MAX_NUDGE_MS, MIN_BPM, restingClock, showClock, transported, type CueMode, type ShowClock, type ShowState, type TransportAction } from "../shared/show.ts";
+import { PARKED, playheadAfter, type Playhead } from "../shared/show-timeline.ts";
 import type { Op } from "../shared/live.ts";
 import type { Me } from "../shared/vibes.ts";
 import type { Db } from "./db.ts";
@@ -27,9 +30,21 @@ interface Deps {
   rNow: () => number;
   /** Told the clock each time it changes: for every sketch's stream. */
   onClock?: (clock: ShowClock) => void;
+  /** Told each time the show's clock or playhead changes: for the timeline playing (timeline-player.ts). */
+  onChange?: () => void;
 }
 
-export function createShow({ db, publish, rNow, onClock = () => {} }: Deps) {
+/** A playhead, if this is one as it was saved; else bar 1, stopped. */
+function playheadOf(v: unknown): Playhead {
+  if (!v || typeof v !== "object") return PARKED;
+  const { pos, at, lock } = v as Record<string, unknown>;
+  if (!Number.isFinite(pos) || !Number.isFinite(at)) return PARKED;
+  const l = lock as { from?: unknown; next?: unknown } | null;
+  if (l !== null && !(Number.isFinite(l?.from) && Number.isFinite(l?.next))) return PARKED;
+  return { pos: pos as number, at: at as number, lock: l ? { from: l.from as number, next: l.next as number } : null };
+}
+
+export function createShow({ db, publish, rNow, onClock = () => {}, onChange = () => {} }: Deps) {
   let show = load();
 
   function load(): ShowState {
@@ -37,15 +52,16 @@ export function createShow({ db, publish, rNow, onClock = () => {} }: Deps) {
       const saved = JSON.parse(db.setting(KEY) ?? "null") as Partial<ShowState> | null;
       const clock = showClock(saved?.clock);
       const cue = CUE_MODES.includes(saved?.cue as CueMode) ? saved!.cue! : "now";
-      if (clock && typeof saved?.on === "boolean") return { on: saved.on, clock, cue, queued: null };
+      const playhead = playheadOf(saved?.playhead);
+      if (clock && typeof saved?.on === "boolean") return { on: saved.on, clock, cue, queued: null, playhead };
     } catch {
       // Rests, as if there'd never been a show.
     }
-    return { on: false, clock: restingClock(rNow()), cue: "now", queued: null };
+    return { on: false, clock: restingClock(rNow()), cue: "now", queued: null, playhead: PARKED };
   }
 
   // What's kept: not the scene waiting for its frame, which a vibes starting again hasn't.
-  const save = () => db.setSetting(KEY, JSON.stringify({ on: show.on, clock: show.clock, cue: show.cue }));
+  const save = () => db.setSetting(KEY, JSON.stringify({ on: show.on, clock: show.clock, cue: show.cue, playhead: show.playhead }));
 
   return {
     clock: () => show.clock,
@@ -78,10 +94,13 @@ export function createShow({ db, publish, rNow, onClock = () => {} }: Deps) {
         return show.clock;
       }
       const on = a.do === "start" ? true : a.do === "end" ? false : show.on;
-      show = { ...show, on, clock: transported(show.clock, a) };
+      const clock = transported(show.clock, a);
+      const playhead = playheadAfter(show.playhead, show.clock, clock, a, rNow());
+      show = { ...show, on, clock, playhead };
       save();
-      publish(a.do === "start" || a.do === "end" ? [["show/on", on], ["show/clock", show.clock]] : [["show/clock", show.clock]]);
+      publish([...(a.do === "start" || a.do === "end" ? [["show/on", on] as Op] : []), ["show/clock", clock], ["show/playhead", playhead]]);
       onClock(show.clock);
+      onChange();
       const detail: Record<string, unknown> = { do: a.do };
       if (a.do === "tempo") detail.bpm = a.bpm;
       if (a.do === "seek") detail.t = a.t;

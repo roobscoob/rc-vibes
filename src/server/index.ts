@@ -30,6 +30,8 @@ import { createTimeline } from "./timeline.ts";
 import { createSceneFeed } from "./scene-feed.ts";
 import { createScenes } from "./scenes.ts";
 import { createShow } from "./show.ts";
+import { createShowTimeline } from "./show-timeline.ts";
+import type { PlayingRef } from "./timeline-player.ts";
 import { boxApiRoutes, sketchRoutes } from "./sketches.ts";
 import { createStreamRelay } from "./stream.ts";
 
@@ -80,11 +82,16 @@ const layout = createLayout({ db, arclampLights: lights.arclampLights, currentLi
 // (show.ts): told to every page (the tree) and every sketch (its stream).
 const rtime = createRclampTime({ arclamp });
 rtime.start();
-const show = createShow({ db, publish: live.publish, rNow: rtime.rNow, onClock: (clock) => params?.tellClock(clock) });
+// The timeline playing (timeline-player.ts, made with the shaders in api.ts)
+// is told at once of every change it plays by: the show's, a block's.
+const playing: PlayingRef = { changed: () => {} };
+const show = createShow({ db, publish: live.publish, rNow: rtime.rNow, onClock: (clock) => params?.tellClock(clock), onChange: () => playing.changed() });
 live.replace([["show", show.tree()]]);
-// The room's scenes (scenes.ts): told to every page (the tree).
+// The room's scenes (scenes.ts), and the show's timeline of them (show-timeline.ts): told to every page (the tree).
 const scenes = createScenes({ db, publish: live.publish, room: () => live.tree() });
 live.replace([["scenes", scenes.tree()]]);
+const showTimeline = createShowTimeline({ db, publish: live.publish, scenes, onChange: () => playing.changed() });
+live.replace([["timeline", showTimeline.tree()]]);
 
 // The scene, followed as it changes, its footprints from the light stream;
 // arclamp's health, likewise; and sketches put in the room (instances),
@@ -154,7 +161,7 @@ if (sketches) app.route("/", boxApiRoutes(config, sketches, db, lights, pools, p
 if (builds) app.route("/", buildApiRoutes(config, builds));
 if (params) app.route("/", params.routes());
 const sketchApi = sketches && boxes && builds ? sketchRoutes(sketches, db, boxes, builds, defaults) : null;
-app.route("/api", apiRoutes({ config, arclamp: noted, db, relay, origins, lights, feed, live, pools, layout, sketches: sketchApi, instances, health, rtime, show, scenes }));
+app.route("/api", apiRoutes({ config, arclamp: noted, db, relay, origins, lights, feed, live, pools, layout, sketches: sketchApi, instances, health, rtime, show, scenes, timeline: showTimeline, playing }));
 if (config.production) {
   // The built files' dates are Nix's (1970), which browsers take to mean the
   // page is fresh for years: a cached page then loads without the network

@@ -36,10 +36,11 @@
 //   scenes/list/<id>/shaders/<key>    its sketch, with its knobs (SceneKnobs); null: none
 //   scenes/list/<id>/shaders/<key>/<param>/<light>  one of its knobs; taken away, back to the default
 //   scenes/order                      every scene's id, in order
+//   timeline/blocks/<id>              { scene, row, start, end }: a block put on the timeline, whole; null: taken away (shared/show-timeline.ts)
 //
-// (show/on, show/clock, show/cue and show/queued are vibes' own: what each
-// action makes. Scenes are made at once, whatever the mode: they're the
-// room's, never a pending edit.)
+// (show/on, show/clock, show/cue, show/queued and show/playhead are vibes'
+// own: what each action makes. Scenes and the timeline are changed at once,
+// whatever the mode: they're the room's, never a pending edit.)
 //
 // Nothing is an array but a value: paths only go through objects.
 //
@@ -56,6 +57,7 @@ import type { ParamSpec, ParamValue } from "./params.ts";
 import type { Presence } from "./presence.ts";
 import { NO_SCENES, type Scenes } from "./scenes.ts";
 import { RESTING, type ShowState } from "./show.ts";
+import { NO_TIMELINE, type Timeline } from "./show-timeline.ts";
 import type { Shader, ShaderKey } from "./vibes.ts";
 
 /** Where a value is in the tree: its keys, joined with "/". */
@@ -109,9 +111,11 @@ export interface LiveTree {
   show: ShowState;
   /** The room's scenes (shared/scenes.ts). */
   scenes: Scenes;
+  /** The show's timeline: scenes on it, as blocks (shared/show-timeline.ts). */
+  timeline: Timeline;
 }
 
-export const EMPTY_TREE: LiveTree = { roomtone: {}, shaders: {}, stack: [], pools: {}, layout: null, show: RESTING, scenes: NO_SCENES };
+export const EMPTY_TREE: LiveTree = { roomtone: {}, shaders: {}, stack: [], pools: {}, layout: null, show: RESTING, scenes: NO_SCENES, timeline: NO_TIMELINE };
 
 /** A sketch put in the room, as an update says it (at shaders/<+key>, its pending edit's key). */
 export interface AddSpec {

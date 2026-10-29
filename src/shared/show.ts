@@ -22,6 +22,7 @@
 // clock again, the nudge kept (the room's sound is as late as it was).
 
 import { BEATS_PER_BAR, beatAt, restingClock, type ShowClock } from "../../packages/vibes/src/wire.ts";
+import { PARKED, type Playhead } from "./show-timeline.ts";
 
 export { BEATS_PER_BAR, beatAt, RESTING_BPM, restingClock, showClock, timeAt, type ShowClock } from "../../packages/vibes/src/wire.ts";
 
@@ -33,13 +34,15 @@ export { BEATS_PER_BAR, beatAt, RESTING_BPM, restingClock, showClock, timeAt, ty
 export type CueMode = "now" | "beat" | "bar";
 export const CUE_MODES: readonly CueMode[] = ["now", "beat", "bar"];
 
-/** The show: whether one's on, its clock (resting, while none is), how scenes come in, and the one waiting for its frame. */
+/** The show: whether one's on, its clock (resting, while none is), how scenes come in, the one waiting for its frame, and where its timeline's playhead is. */
 export interface ShowState {
   on: boolean;
   clock: ShowClock;
   cue: CueMode;
   /** A scene applied, waiting for its frame (arclamp's time): gone once that's come. */
   queued: { scene: string; frame: number } | null;
+  /** The timeline's playhead (shared/show-timeline.ts). */
+  playhead: Playhead;
 }
 
 /** What a page does to the clock, at `at` (arclamp's time). */
@@ -66,7 +69,7 @@ export const MAX_BPM = 300;
 export const MAX_NUDGE_MS = 1000;
 
 /** No show on, as a page has it till vibes says: resting, the piece counted from 1970 (vibes' rests from when it began). */
-export const RESTING: ShowState = { on: false, clock: restingClock(0), cue: "now", queued: null };
+export const RESTING: ShowState = { on: false, clock: restingClock(0), cue: "now", queued: null, playhead: PARKED };
 
 // A press this little after a beat (as a fraction of one) is that beat's, not the next's.
 export const LATE_BEATS = 0.04;
