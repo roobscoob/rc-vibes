@@ -5,8 +5,9 @@ import { Avatar } from "./Avatar.tsx";
 import { Menu } from "./Menu.tsx";
 import { OthersHere } from "./OthersHere.tsx";
 import { Segmented } from "./Segmented.tsx";
+import { ShowMenuItem } from "./Transport.tsx";
 
-/** Who's logged in (everyone else here beside them), as an avatar that opens live mode, admin controls, how colors show, and logging out. */
+/** Who's logged in (everyone else here beside them), as an avatar that opens live mode, admin controls, how colors show, starting or ending a show, and logging out. */
 export function UserMenu() {
   const me = useMe();
   const admin = useAdminMode();
@@ -27,6 +28,7 @@ export function UserMenu() {
         <MenuToggle label="Live Mode" off="Off" on="On" value={liveMode} onChange={setLiveMode} />
         <MenuToggle label="Admin Controls" off="Hide" on="Show" value={admin} onChange={setAdminMode} />
         <MenuToggle label="HDR" off="Off" on="On" value={display.hdrChoice} onChange={setHdrChoice} />
+        <ShowMenuItem />
       </Menu>
     </span>
   );

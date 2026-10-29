@@ -13,12 +13,17 @@
 // udp. A shader's params, pending edits and all, are handed to it as vibes'
 // stream hands them over in the room. What a sketch being added declares, its
 // preview here says (drafts.declared), so its knobs are there before it's in.
+// Its frames are in arclamp's time, as this page reckons it (rtime.ts), and
+// each shader has the show clock, so a sketch's beat here is the room's.
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { Channels, LightInfo } from "../shared/arclamp.ts";
 import type { ParamSpec, ShaderParams } from "../shared/params.ts";
+import type { ShowClock } from "../shared/show.ts";
 import { drafts, type Layer, type LayerKey } from "./draft.ts";
 import { pushSimFrame, setSimulated } from "./live.ts";
+import { rNow } from "./rtime.ts";
+import { showClockNow } from "./scene.ts";
 import type { FromWorker, ToWorker } from "./sim.worker.ts";
 
 const TICK_MS = 33;
@@ -126,6 +131,8 @@ class ShaderWorker {
   stopped = false;
   /** The params' values last sent it, as JSON. */
   private sentParams: string | null = null;
+  /** The show clock last sent it. */
+  private sentClock: ShowClock | null = null;
 
   readonly script: string;
 
@@ -167,6 +174,13 @@ class ShaderWorker {
       });
       this.worker.postMessage({ type: "tick", seq, prev, now, initial });
     });
+  }
+
+  /** The show clock, when it's changed since last sent. */
+  sendClock(clock: ShowClock) {
+    if (clock === this.sentClock) return;
+    this.sentClock = clock;
+    this.worker.postMessage({ type: "clock", clock } satisfies ToWorker);
   }
 
   /** Its params' values, all of them, when they've changed since last sent. */
@@ -324,7 +338,8 @@ class Simulation {
   private async tick() {
     if (!this.running) return;
     const started = performance.now();
-    const now = Date.now();
+    const now = rNow();
+    const clock = showClockNow();
     const { lights, layers, template, peekAbove = 0 } = this.inputs;
     const run = await runPipeline(
       lights,
@@ -334,6 +349,7 @@ class Simulation {
       async (layer, state) => {
         const w = this.workers.get(layer.key);
         if (!w || w.stopped) return null;
+        w.sendClock(clock);
         return w.call(prevOf(state, lights, now), now, now);
       },
       () => this.running,
