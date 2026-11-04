@@ -631,10 +631,18 @@ kbd {
 
 /* Editing a layer's domain (ShadersPanel.tsx), a button under its Domain, lit while it is. */
 /* Focus and Edit, over a layer's Domain: a row of their own, each half of
-   it (or, with only Focus, all of it). */
+   it (or, with only Focus, all of it), and, for one made outside vibes, its
+   Delete square at the end, its confirm wrapping under them all. */
 .layer-modes {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.layer-modes > button.quiet.shader-delete {
+  flex: none;
+  width: 30px;
+  padding: 0;
 }
 
 .layer-modes > button.quiet {
@@ -1096,6 +1104,13 @@ kbd {
 
 .layer.open > .reveal {
   clip-path: inset(var(--stuck-by, 0px) 0 0 0);
+}
+
+/* A row that's always open (the layers panel's) shows it with no Reveal
+   round it: its top margin is outside it, between it and the head, and its
+   clip reaches past its other edges so a focus ring there isn't cut off. */
+.layer.open > .layer-details {
+  clip-path: inset(calc(var(--stuck-by, 0px) - 16px) -8px -8px -8px);
 }
 
 /* Under a row's head, a hairline between it and what it shows, the whole
@@ -1932,12 +1947,14 @@ button.quiet.add-sketch-section-action {
   font-size: 12.5px;
 }
 
-.shader-actions button.quiet {
+.shader-actions button.quiet,
+.layer-modes .confirm-delete button.quiet {
   height: 28px;
   padding: 0 10px;
 }
 
-.shader-actions .confirm-delete {
+.shader-actions .confirm-delete,
+.layer-modes .confirm-delete {
   flex-basis: 100%;
 }
 
@@ -1947,19 +1964,23 @@ button.quiet.add-sketch-section-action {
   gap: 7px;
 }
 
-.shader-actions .confirm-delete {
+.shader-actions .confirm-delete,
+.layer-modes .confirm-delete {
   justify-content: flex-start;
 }
 
 /* Taking a layer out (or not adding it): like the other actions until it's
    pointed at, then red, as a card menu's Delete is (not the warning orange
    quiet danger buttons have elsewhere). */
-.shader-actions button.quiet.danger {
+.shader-actions button.quiet.danger,
+.layer-modes button.quiet.danger {
   color: var(--ink-2);
 }
 
 .shader-actions button.quiet.danger:hover:not(:disabled),
-.shader-actions button.quiet.danger:focus-visible {
+.shader-actions button.quiet.danger:focus-visible,
+.layer-modes button.quiet.danger:hover:not(:disabled),
+.layer-modes button.quiet.danger:focus-visible {
   background: rgb(66 26 22 / 0.8);
   color: var(--bad);
 }
@@ -2079,11 +2100,32 @@ button.layer-chevron:hover {
   cursor: pointer;
 }
 
-/* The right panel's heads are the buttons that open their rows: ringed for the keyboard. */
-.layer-head.toggle[role="button"]:focus-visible {
+/* A head's name is its button for the keyboard (the head holds other
+   controls, which can't be inside one): it rings the whole head, as the
+   head is what the pointer clicks. */
+.layer-head.toggle:has(.layer-name-button:focus-visible) {
   outline: 2px solid var(--ink-2);
   outline-offset: -2px;
   border-radius: 8px;
+}
+
+.layer-name-button:focus-visible {
+  outline: none;
+}
+
+/* In the layers panel, a real button, its asterisk beside it: it gives way
+   to a long name rather than the asterisk being cut off. */
+.shader-row .layer-name {
+  display: flex;
+  align-items: center;
+}
+
+button.layer-name-button {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
 }
 
 /* The base tone's color, under its row, in the rail's other column, inset as a shader's details are. */
@@ -2535,17 +2577,25 @@ button.layer-chevron:hover {
     -webkit-user-select: none;
   }
 
-  /* The grabber says the sheet moves; the whole head is what takes the pull. */
+  /* The grabber says the sheet moves; the whole head is what takes the pull.
+     It's a button too, for the keyboard: a target round the bar it draws. */
   .sidebar-grabber {
     position: absolute;
-    top: 7px;
+    top: 0;
     left: 50%;
-    display: block;
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 19px;
+    transform: translateX(-50%);
+  }
+
+  .sidebar-grabber::before {
+    content: "";
     width: 36px;
     height: 5px;
     border-radius: 3px;
     background: var(--line-2);
-    transform: translateX(-50%);
   }
 
   /* The floors, zoom and drawer ride up above the sheet, keeping up with it frame by frame. */
@@ -3613,7 +3663,7 @@ input.tempo-bpm {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
-  color: var(--faint);
+  color: var(--mute);
   font-size: 11px;
 }
 

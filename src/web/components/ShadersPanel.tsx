@@ -40,9 +40,10 @@ import { isBaseColor } from "../../shared/base-color.ts";
 import { defaultSketch } from "../../shared/default-sketches.ts";
 import { count } from "../words.ts";
 import { AddSketch } from "./AddSketch.tsx";
+import { reorderAnnouncements, reorderInstructions } from "./layer-announcements.ts";
 import { Sidebar, SidebarDetails, SidebarSection } from "./Sidebar.tsx";
 import { LightsSummary } from "./LightsSummary.tsx";
-import { AddingActions, CloneShader, ComingActions, OpenCode, RemoveShader } from "./ShaderPanel.tsx";
+import { AddingActions, CloneShader, ComingActions, OpenCode, refocusRow, RemoveShader } from "./ShaderPanel.tsx";
 import { keyedMode, type SelectMode } from "../selection.ts";
 import { ChangesMark, inPreview, ShaderNode, withGoing } from "./SelectionPanel.tsx";
 import { useShowUnsaved } from "../unsaved.ts";
@@ -140,7 +141,15 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
         )
       }
     >
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onDragEnd}
+        accessibility={{
+          announcements: reorderAnnouncements(listed, (key) => shown.find((l) => l.key === key)?.name ?? key),
+          screenReaderInstructions: reorderInstructions,
+        }}
+      >
         <SortableContext items={listed} strategy={verticalListSortingStrategy}>
           <ol className="layers">
             {shown.map((layer) => {
@@ -233,6 +242,7 @@ function ShaderRow({ layer, going, changed, here, all, scene, editing, active, o
   const on = domainOf(layer);
   // Under the pointer, its lights pointed out on the map.
   const pointsOut = usePointsOut(() => domainOf(layer));
+  const pick = (e: MouseEvent) => onPick(e.altKey ? "remove" : e.shiftKey ? "add" : "replace");
   return (
     <li
       ref={drag?.ref}
@@ -244,14 +254,17 @@ function ShaderRow({ layer, going, changed, here, all, scene, editing, active, o
       <div className="layer-rail">
         <ShaderNode layer={layer} lights={all} hollow={on.length === 0 || going || !inPreview(layer)} />
       </div>
+      {/* All of its head picks it, but its own buttons; by keyboard, its name, the button for it. */}
       <div
         className="layer-head toggle"
-        onClick={(e: MouseEvent) => !(e.target as Element).closest("button") && onPick(e.altKey ? "remove" : e.shiftKey ? "add" : "replace")}
+        onClick={(e: MouseEvent) => !(e.target as Element).closest("button") && pick(e)}
         {...pointsOut}
       >
         <span className="layer-text">
-          <span className="layer-name">
-            {layer.name}
+          <span className="layer-name" title={layer.name}>
+            <button className="layer-name-button" aria-label={`${layer.name}, select its lights`} onClick={pick}>
+              {layer.name}
+            </button>
             {changed && <ChangesMark changed={changed} here={here} onSelect={onSelect} />}
           </span>
           <span className="layer-meta">{count(on.length, "light")}</span>
@@ -384,7 +397,7 @@ function EditDomain({ layer, editing }: { layer: Layer; editing: boolean }) {
  * it, updating it, and deleting it). The base Tone is vibes' own: it has no Sketch
  * section (just a note that it's always there), and can't be deleted or
  * moved; a shader made outside vibes has none either,
- * its Delete under its domain. One
+ * its Delete beside its Focus and Edit. One
  * you're taking out can only be kept; one on its way in, opened or let go.
  */
 function Sections({
@@ -406,7 +419,8 @@ function Sections({
   if (going) {
     return (
       <div className="shader-actions">
-        <button className="quiet shader-action" onClick={() => drafts.keep(layer.key)}>
+        {/* Kept, the keyboard goes back to its Delete. */}
+        <button className="quiet shader-action" onClick={(e) => refocusRow(e, () => drafts.keep(layer.key), ".shader-delete")}>
           Keep it
         </button>
       </div>
@@ -419,22 +433,19 @@ function Sections({
   const builtIn = defaultSketch(layer.adding?.sketchId ?? layer.instance?.sketchId ?? layer.sketch?.id);
   // A sketch's (in the room, on its way, or being added): it has a Sketch section. One of vibes' own, or a shader made outside vibes, hasn't.
   const isSketch = !builtIn && (layer.sketch !== null || layer.adding !== null || coming);
-  // One made outside vibes can still be deleted: with no Sketch section, under its domain.
+  // One made outside vibes can still be deleted: with no Sketch section, beside its Focus and Edit.
   const outside = !isSketch && !builtIn;
   return (
     <>
-      {/* Above its Domain, the map about it: Focus and Edit, side by side, the whole width between them. */}
+      {/* Above its Domain, the map about it: Focus and Edit, side by side, the whole width between them
+          (and, for one made outside vibes, with nothing else to do to it, its Delete at the end). */}
       <div className="layer-modes">
         <FocusLayer layer={layer} />
         {changeable(layer) && <EditDomain layer={layer} editing={editing} />}
+        {outside && <RemoveShader layer={layer} />}
       </div>
       <SidebarSection title="Domain">
         {on.length > 0 ? <LightsSummary lights={lightsOf(on, all)} /> : <span className="domain-empty">No domain</span>}
-        {outside && (
-          <div className="shader-actions">
-            <RemoveShader layer={layer} />
-          </div>
-        )}
       </SidebarSection>
       {/* One of vibes' own sketches: its own section, by its name (cloning it, taking it out). Not the base Tone's, which is just its Domain. */}
       {builtIn && !base && (

@@ -16,7 +16,7 @@
 // pending edits. (One that couldn't go in has neither.) What can be done to
 // a shader besides is in the shaders panel (ShadersPanel.tsx).
 
-import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import type { Channels, LightInfo } from "../../shared/arclamp.ts";
 import { lemtoneOf, seenOf } from "../../shared/fixtures.ts";
 import { lemtoneCss } from "../../shared/lemtone.ts";
@@ -145,6 +145,7 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
   const setOn = (row: Row, on: boolean) => drafts.patchShader(row.layer.key, switchFor(row.layer, ids, on, all));
 
   const title = `${count(chosen.length, "light")} selected`;
+  const toneToggle = toggling(opened.isOpen("roomtone"), () => opened.toggle("roomtone"));
 
   // As a sheet, the heights it rests at: its head (and the safe area under
   // it); up to HALF the screen, or less when that's all of it; the screen.
@@ -178,11 +179,14 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
   // middle. The height mid-drag is kept in a ref too, as a quick flick can
   // let go before React re-renders.
   const [rest, setRest] = useState<Rest>("peek");
+  // The heights it rests at, shortest first (with just a little in it, fewer than three).
+  const rests = heights ? (["peek", "half", "full"] as const).filter((r, i, all) => i === 0 || heights[r] > heights[all[i - 1]!]) : [];
   const [dragged, setDragged] = useState<number | null>(null);
   const grip = useRef<{ y: number; from: number; at: number; lastY: number; lastT: number; speed: number; moved: boolean } | null>(null);
   const grab = {
     onPointerDown: (e: PointerEvent<HTMLElement>) => {
-      if (!narrow || !heights || (e.target as Element).closest("button")) return;
+      // Its own buttons do their own things, but the grabber, which is where it's pulled from.
+      if (!narrow || !heights || (e.target as Element).closest("button:not(.sidebar-grabber)")) return;
       const from = panel.current!.offsetHeight;
       grip.current = { y: e.clientY, from, at: from, lastY: e.clientY, lastT: e.timeStamp, speed: 0, moved: false };
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -211,8 +215,6 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
         return;
       }
       const speed = e.timeStamp - g.lastT > PAUSE_MS ? 0 : g.speed;
-      // Shortest first.
-      const rests = (["peek", "half", "full"] as const).filter((r, i, all) => i === 0 || heights[r] > heights[all[i - 1]!]);
       const nearest = rests.reduce((best, r) => (Math.abs(heights[r] - g.at) < Math.abs(heights[best] - g.at) ? r : best));
       if (speed > FLICK) setRest(rests.find((r) => heights[r] > g.at) ?? "full");
       else if (speed < -FLICK) setRest([...rests].reverse().find((r) => heights[r] < g.at) ?? "peek");
@@ -224,6 +226,25 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     },
   };
   const sheet = narrow && heights;
+
+  // By keyboard, its grabber is a button: pressed, on to the next height up, and from the top, back to just its head.
+  // (A tap on it is the head's, above: a click from the pointer has a detail, one from the keyboard none.)
+  const grabber = sheet
+    ? {
+        "aria-label": "Resize panel",
+        "aria-expanded": rest !== "peek",
+        onClick: (e: MouseEvent) => e.detail === 0 && setRest(rests[(rests.indexOf(rest) + 1) % rests.length] ?? "peek"),
+      }
+    : undefined;
+  // Tabbing into what's under its head while it's just its head: up to its middle, so what has the keyboard shows.
+  const peeking = !!sheet && rest === "peek";
+  useEffect(() => {
+    if (!peeking) return;
+    const el = body.current!;
+    const up = () => setRest("half");
+    el.addEventListener("focusin", up);
+    return () => el.removeEventListener("focusin", up);
+  }, [peeking]);
 
   // As a sheet, its height lifts the map's bottom controls clear of it
   // (--sheet-h), up to its middle height: taller, they stay put and it rises over them.
@@ -250,7 +271,7 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
       style={sheet ? { height: dragged ?? heights[rest] } : undefined}
       headRef={head}
       headProps={grab}
-      grabber
+      grabber={grabber}
       bodyRef={body}
       head={
         <>
@@ -279,9 +300,11 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
               <div className="layer-rail">
                 <ToneNode colors={toneColors(chosen, template, gamut)} />
               </div>
-              <div className="layer-head toggle" {...toggling(opened.isOpen("roomtone"), () => opened.toggle("roomtone"))}>
+              <div className="layer-head toggle" {...toneToggle.head}>
                 <span className="layer-text">
-                  <span className="layer-name">Room Tone</span>
+                  <span className="layer-name layer-name-button" {...toneToggle.name}>
+                    Room Tone
+                  </span>
                 </span>
                 <Chevron />
               </div>
@@ -376,11 +399,27 @@ export function ChangesMark({ changed, here, onSelect }: { changed: readonly num
   );
 }
 
+// The chip just pressed, by its text, while the panel gives way to the other one (IdlePanel and
+// SelectionPanel, App.tsx, as the selection empties or fills): the new panel's same chip takes the
+// keyboard, rather than it dropping to the page. Kept only for the panel the press itself brings.
+let pressed: string | null = null;
+
 /** The groups of lights here (all of them, the main space, each tag), to select and let go of. */
 function Groups({ here, selected, onSelect }: { here: LightInfo[]; selected: ReadonlySet<number>; onSelect: Props["onSelect"] }) {
+  const section = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const text = pressed;
+    pressed = null;
+    if (text === null || document.activeElement !== document.body) return;
+    [...(section.current?.querySelectorAll("button") ?? [])].find((b) => b.textContent === text)?.focus();
+  }, []);
   if (here.length === 0) return null;
+  const press = (e: MouseEvent) => {
+    pressed = (e.target as Element).closest("button")?.textContent ?? null;
+    setTimeout(() => (pressed = null));
+  };
   return (
-    <section className="panel-groups">
+    <section className="panel-groups" ref={section} onClick={press}>
       <TagChips lights={here} selected={selected} onSelect={onSelect} />
     </section>
   );
@@ -584,20 +623,23 @@ function detailsOf(layer: Layer, chosen: LightInfo[]): ReactNode | null {
 }
 
 /**
- * A row's head that opens and closes what's under it, from anywhere on it
- * (but its own buttons, which do their own things), by mouse or keyboard:
- * the head itself is the button. Clicking does nothing else.
+ * A row's head that opens and closes what's under it: by mouse, from anywhere
+ * on it (but its own buttons, which do their own things); by keyboard, its
+ * name is the button (the head itself holds its switch, which a button
+ * can't). Clicking does nothing else.
  */
-function toggling(open: boolean, onToggle: () => void): HTMLAttributes<HTMLDivElement> {
+function toggling(open: boolean, onToggle: () => void): { head: HTMLAttributes<HTMLDivElement>; name: HTMLAttributes<HTMLSpanElement> } {
   return {
-    role: "button",
-    tabIndex: 0,
-    "aria-expanded": open,
-    onClick: (e) => !(e.target as Element).closest("button") && onToggle(),
-    onKeyDown: (e) => {
-      if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
-      e.preventDefault();
-      onToggle();
+    head: { onClick: (e) => !(e.target as Element).closest("button") && onToggle() },
+    name: {
+      role: "button",
+      tabIndex: 0,
+      "aria-expanded": open,
+      onKeyDown: (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onToggle();
+      },
     },
   };
 }
@@ -621,14 +663,15 @@ function ShaderRow(props: RowProps) {
   // Not in the room yet: on its way in, or yours to add (previewed once it's built).
   const { stage, adding } = row.layer;
   const coming = stage === "live" ? "" : stage === "adding" ? (adding?.build?.state === "built" ? " coming adding built" : " coming adding") : " coming";
-  const head = <RowParts {...props} />;
+  const toggle = expandable ? toggling(open, onToggle) : null;
+  const head = <RowParts {...props} name={toggle?.name} />;
   return (
     <li className={`layer${coming}${row.state === "off" ? " off" : ""}${open ? " open" : ""}`}>
       <div className="layer-rail">
         <ShaderNode layer={row.layer} lights={lights} hollow={row.state === "off" || !inPreview(row.layer)} />
       </div>
       {expandable ? (
-        <div className="layer-head toggle" {...toggling(open, onToggle)}>
+        <div className="layer-head toggle" {...toggle!.head}>
           {head}
         </div>
       ) : (
@@ -651,7 +694,7 @@ function ShaderRow(props: RowProps) {
  * row, or, if it shows nothing, the quiet dot in its place, so every row
  * ends in the same column.
  */
-function RowParts({ row, lights, onSwitch, details }: RowProps) {
+function RowParts({ row, lights, onSwitch, details, name }: RowProps & { name?: HTMLAttributes<HTMLSpanElement> }) {
   const { layer, state } = row;
   const sketch = layer.sketch;
   // Its params on these lights, if any aren't at their default: one link puts them all back, under its name.
@@ -659,7 +702,7 @@ function RowParts({ row, lights, onSwitch, details }: RowProps) {
   return (
     <>
       <span className="layer-text">
-        <span className="layer-name">
+        <span className={name ? "layer-name layer-name-button" : "layer-name"} title={layer.name} {...name}>
           {layer.name}
           {/* Not built by vibes (no stamp): made in rclamp some other way. */}
           {!sketch && <span className="layer-badge external">external</span>}
@@ -702,7 +745,9 @@ function FailedRow({ layer }: { layer: Layer }) {
       </div>
       <div className="layer-head">
         <span className="layer-text">
-          <span className="layer-name">{name}</span>
+          <span className="layer-name" title={name}>
+            {name}
+          </span>
         </span>
         <RowEnd />
       </div>
@@ -719,7 +764,9 @@ function GoingRow({ layer }: { layer: Layer }) {
       </div>
       <div className="layer-head">
         <span className="layer-text">
-          <span className="layer-name">{layer.name}</span>
+          <span className="layer-name" title={layer.name}>
+            {layer.name}
+          </span>
         </span>
         <button className="quiet layer-keep" onClick={() => drafts.keep(layer.key)}>
           Keep
