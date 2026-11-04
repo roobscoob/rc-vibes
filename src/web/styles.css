@@ -751,7 +751,7 @@ kbd {
   color: var(--faint);
 }
 
-/* Lit: solid blue, the icon dark on it, glowing. */
+/* Lit: solid pink (unsaved changes' accent), the icon dark on it, glowing. */
 .save-button.lit {
   background: var(--sim);
   color: #2a0d11;
