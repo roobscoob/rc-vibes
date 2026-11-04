@@ -23,6 +23,9 @@ const PILL_MAX = 24;
 // How often the colors are kept up.
 const TICK_MS = 250;
 
+/** One light, said as everywhere: its kind and its id ("color bulb #12"). */
+export const lightName = (l: Pick<LightInfo, "id" | "type">) => `${KINDS.find(([t]) => t === baseType(l.type))?.[1] ?? baseType(l.type)} #${l.id}`;
+
 const kindOrder = (type: string) => {
   const i = KINDS.findIndex(([t]) => t === type);
   return i < 0 ? KINDS.length : i;
@@ -53,7 +56,7 @@ export function LightsSummary({ lights, size = "large" }: { lights: readonly Pic
   return (
     <span className={`lights-summary ${size}`}>
       {kinds.map(([kind, ls]) => {
-        const [, one, many] = KINDS.find(([t]) => t === kind) ?? [kind, kind, kind];
+        const [, , many] = KINDS.find(([t]) => t === kind) ?? [kind, kind, kind];
         return (
           <span key={kind} className="lights-summary-line">
             {ls.length === 1 ? (
@@ -66,7 +69,7 @@ export function LightsSummary({ lights, size = "large" }: { lights: readonly Pic
                 ))}
               </span>
             )}
-            {ls.length === 1 ? `${one} #${ls[0]!.id}` : `${ls.length} ${many}`}
+            {ls.length === 1 ? lightName(ls[0]!) : `${ls.length} ${many}`}
           </span>
         );
       })}

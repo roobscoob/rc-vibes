@@ -28,7 +28,7 @@
 // either end of it, lines it up with its track, and the lights on it come
 // along. Selected lights can be tagged (TagEditor).
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import type { Frame, LightInfo, Rail, RailPoint, RailSpot } from "../../shared/arclamp.ts";
 import { baseType, footprintOf, orientationsOf, seenOf } from "../../shared/fixtures.ts";
 import { cssColor, lightRgb, lookOf, LUMENS_PER_BRIGHTNESS, swatch, type Vec3 } from "../../shared/lemtone.ts";
@@ -70,7 +70,8 @@ import { Segmented } from "./Segmented.tsx";
 import { cameraAt, Pegman, StreetViewSpots } from "./StreetViewMarks.tsx";
 import { TagEditor } from "./TagEditor.tsx";
 import { Tooltip } from "./Tooltip.tsx";
-import { LightsSummary } from "./LightsSummary.tsx";
+import { lightName, LightsSummary } from "./LightsSummary.tsx";
+import { ARROWS, firstLight, nextLight } from "../map-keys.ts";
 import { cssRgb, MINE, ringOf, type Rgb } from "../../shared/presence.ts";
 import { keyedMode, RING_DASH, ringStyle, selectionWith, type SelectMode } from "../selection.ts";
 
@@ -330,7 +331,7 @@ export function RoomMap({
   // light drags them all. A finger held on a light only shows what it is.
   // The rings show it (Preview), not anything worked out beside it.
   const preview = useMemo((): Preview | null => {
-    const change = boxing ?? (hover && !moving && lastPointer.current !== "touch" ? clickChange(hover.id, panKey ? "toggle" : pressMode(heldKeys), selected) : null);
+    const change = boxing ?? (hover && !moving && lastPointer.current !== "touch" ? clickChange(hover.id, panKey || lastPointer.current === "keyboard" ? "toggle" : pressMode(heldKeys), selected) : null);
     return change && { targets: new Set(change.ids), next: selectionWith(selected, change.ids, change.mode) };
   }, [boxing, hover, moving, panKey, heldKeys, selected]);
 
@@ -1274,6 +1275,23 @@ export function RoomMap({
     return () => window.removeEventListener("keydown", onKey);
   }, [moving]);
 
+  // The keyboard's way round the map: the arrows go from light to light
+  // (the one they're on is hovered, as if under the pointer), and Space or
+  // Enter selects it or lets it go, as ⌘-click does.
+  const keyLights = (e: ReactKeyboardEvent<HTMLCanvasElement>) => {
+    const dir = ARROWS[e.key];
+    const on = lastPointer.current === "keyboard" ? hover : null;
+    if (dir) {
+      e.preventDefault();
+      lastPointer.current = "keyboard";
+      const next = on ? nextLight(shown, on, dir) : firstLight(shown, selected);
+      if (next) setHover(next);
+    } else if ((e.key === " " || e.key === "Enter") && on) {
+      e.preventDefault();
+      onSelect([on.id], "toggle");
+    }
+  };
+
   const cursor = panning ? "panning" : panKey ? "pan-ready" : moving && drawing ? "drawing" : moving && (hover || railHover) ? "grab" : hover ? "pointing" : "";
 
   const hint = drawing
@@ -1308,7 +1326,17 @@ export function RoomMap({
         }}
         // Ctrl-drag pans; don't let it open the context menu on a Mac.
         onContextMenu={(e) => e.preventDefault()}
+        tabIndex={0}
+        role="application"
+        aria-label={`Lights on floor ${floor}: arrow keys go from light to light, Space selects`}
+        onKeyDown={keyLights}
+        onBlur={() => {
+          if (lastPointer.current === "keyboard") setHover(null);
+        }}
       />
+      <p className="sr-only" aria-live="polite">
+        {lastPointer.current === "keyboard" && hover ? `${lightName(hover)}${selected.has(hover.id) ? ", selected" : ""}` : ""}
+      </p>
       {view && hover && <LightTooltip light={hover} at={positionOf(hover, drag.current)} view={view} width={size?.width ?? 0} moving={moving} />}
       {view && preview && boxing && preview.next.size > 0 && (
         <SelectionCard lights={shown.filter((l) => preview.next.has(l.id))} at={(l) => positionOf(l, drag.current)} view={view} width={size?.width ?? 0} />

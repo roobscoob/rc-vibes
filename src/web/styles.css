@@ -255,6 +255,16 @@ button:disabled {
   border-radius: 6px;
 }
 
+/* Said to screen readers only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 input {
   font: inherit;
   color: var(--ink);
@@ -3935,6 +3945,11 @@ button.tag-name:hover {
   display: block;
   touch-action: none;
   cursor: default;
+}
+
+/* It fills the window: its focus ring is drawn inside it. */
+.map-canvas:focus-visible {
+  outline-offset: -2px;
 }
 
 .map-canvas.pointing {
