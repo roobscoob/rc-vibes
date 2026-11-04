@@ -2799,7 +2799,9 @@ button.layer-chevron:hover {
   top: calc(100% + 8px);
   z-index: 30;
   min-width: 270px;
+  /* Never wider than the screen, whatever a long name asks for. */
   width: max-content;
+  max-width: calc(100vw - 2 * var(--gap));
   padding: 6px;
   background: var(--solid-2);
   border-radius: 14px;
@@ -2847,7 +2849,16 @@ button.layer-chevron:hover {
   font-weight: 650;
 }
 
+/* A long name gives way to the button beside it. */
+.menu-heading > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menu-heading .menu-item {
+  flex: none;
   width: auto;
   padding: 6px 10px;
   font-weight: 500;
@@ -4297,6 +4308,7 @@ button.tag-name:hover {
 .tooltip.fixed {
   position: fixed;
   z-index: 100;
+  max-width: calc(100vw - 16px);
 }
 
 /* A tone picker's ball under the pointer (ColorField.tsx): its color, then

@@ -204,3 +204,18 @@ describe("the API at the main address, from another", () => {
     expect((await get(new Jar(), "https://vibes.recurse.com/auth/token")).status).toBe(401);
   });
 });
+
+describe("dev login", () => {
+  const dev = loadConfig({ ARCLAMP_BASE_URL: "http://127.0.0.1:8080", ARCLAMP_KEY: "k", SESSION_SECRET: "x".repeat(32), VIBES_DEV_LOGIN: "1" });
+  const login = (name: string) =>
+    new Hono()
+      .route("/auth", authRoutes(dev))
+      .request("/auth/dev-login", { method: "POST", body: JSON.stringify({ name }), headers: { "content-type": "application/json" } });
+
+  it("says how long a name can be when it's too long", async () => {
+    const res = await login("x".repeat(61));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("a name is 1 to 60 characters");
+    expect((await login("x".repeat(60))).status).toBe(200);
+  });
+});

@@ -17,12 +17,18 @@ interface Props {
 export function Menu({ label, name, className, align = "start", side = "below", children }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     // Any press outside, finger or mouse: pointerdown, in the capture phase,
     // since the map cancels the mouse events a touch would otherwise make.
+    // Escape hands focus back to the button, rather than to nothing as the panel goes.
     const close = (e: PointerEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+      if (e instanceof KeyboardEvent) {
+        if (e.key !== "Escape") return;
+        if (ref.current?.contains(document.activeElement)) button.current?.focus();
+        setOpen(false);
+      } else if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", close, true);
     document.addEventListener("keydown", close);
@@ -33,7 +39,7 @@ export function Menu({ label, name, className, align = "start", side = "below", 
   }, [open]);
   return (
     <span className={`menu ${align} ${side}`} ref={ref}>
-      <button className={className} aria-expanded={open} aria-label={name} onClick={() => setOpen(!open)}>
+      <button ref={button} className={className} aria-expanded={open} aria-label={name} onClick={() => setOpen(!open)}>
         {label}
       </button>
       {open && <div className="menu-panel">{children}</div>}

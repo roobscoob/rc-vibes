@@ -3,7 +3,7 @@ import type { LightInfo, Rail } from "../shared/arclamp.ts";
 import { isBinary } from "../shared/fixtures.ts";
 import { inMainSpace } from "../shared/tags.ts";
 import { useAddingBuilds } from "./adding.ts";
-import { useMe, useStreetViews } from "./api.ts";
+import { RequestError, useMe, useStreetViews } from "./api.ts";
 import { useLights, useScene, type Scene } from "./scene.ts";
 import { applyDraft, changeable, currentDraft, domainOf, domainPatch, drafts, layersOf, pendingCount, templateOf, useDraft, type Draft } from "./draft.ts";
 import { setLiveStuck } from "./unsaved.ts";
@@ -40,9 +40,10 @@ const NO_SCENE: Scene = { shaders: [], roomtone: null, pools: {} };
 export function App() {
   const me = useMe();
   const path = usePath();
-  if (me.isPending) return <div className="splash" />;
-  // Still trying (see useMe), but say so, in case it's for a while.
+  // Still trying (see useMe), but say so, in case it's for a while. Checked
+  // before pending: a query that's retrying is still pending.
   if (me.isError || me.failureCount > 0) return <Unreachable error={me.error ?? me.failureReason} trying={!me.isError} retry={() => void me.refetch()} />;
+  if (me.isPending) return <div className="splash" />;
   if (!me.data) return <Login />;
   // A sketch's own page (its editor); the library is a dialog on the room's page.
   return /^\/sketches\/[^/]+/.test(path) ? <SketchPages path={path} /> : <Shell />;
@@ -50,12 +51,14 @@ export function App() {
 
 function Unreachable({ error, trying, retry }: { error: Error | null; trying: boolean; retry: () => void }) {
   return (
-    <div className="splash splash-unreachable">
+    <main className="splash splash-unreachable">
       <p>
-        Couldn't reach vibes{error ? `: ${error.message}` : ""}.{trying ? " Trying again…" : ""}
+        {/* vibes answered, but not well: it was reached. What it said is for its log, not for here. */}
+        {error instanceof RequestError ? "vibes is having trouble." : "Couldn't reach vibes."}
+        {trying ? " Trying again…" : ""}
       </p>
       <button onClick={retry}>Try now</button>
-    </div>
+    </main>
   );
 }
 

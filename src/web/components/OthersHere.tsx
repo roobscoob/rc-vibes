@@ -27,7 +27,7 @@ export function OthersHere() {
     setTip({ x: r.left + r.width / 2, y: r.bottom + 8, others: list });
   };
   return (
-    <span className="others" aria-label={`Also here: ${others.map((o) => o.person.name).join(", ")}`} onPointerLeave={() => setTip(null)}>
+    <span className="others" role="group" aria-label={`Also here: ${others.map((o) => `${o.person.name}, ${doing(o)}`).join("; ")}`} onPointerLeave={() => setTip(null)}>
       {shown.map((o) => (
         <span key={o.person.id} className="other" onPointerEnter={hover([o])}>
           <Avatar name={o.person.name} color={o.color} />
