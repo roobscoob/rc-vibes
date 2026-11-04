@@ -10,12 +10,15 @@
 cd "$VIBES_FOLDER"
 export GIT_TERMINAL_PROMPT=0
 
-# git as start.sh sets it up, for a clone whose box set it up for a vibes
-# somewhere else, or with a token since gone.
-git config --global user.name "$VIBES_USER_NAME"
-git config --global user.email "$VIBES_USER_EMAIL"
+# Who commits, and the box's token for vibes, as start.sh sets them up (for a
+# clone whose box set it up for a vibes somewhere else, or with a token since
+# gone): for this run's git only, written to no config, so running it outside
+# a box (a test, a laptop) can't change anyone's git.
+export GIT_CONFIG_COUNT=3
+export GIT_CONFIG_KEY_0=user.name GIT_CONFIG_VALUE_0="$VIBES_USER_NAME"
+export GIT_CONFIG_KEY_1=user.email GIT_CONFIG_VALUE_1="$VIBES_USER_EMAIL"
 # shellcheck disable=SC2016
-git config --global credential.helper '!f() { echo username=box; echo "password=$VIBES_BOX_TOKEN"; }; f'
+export GIT_CONFIG_KEY_2=credential.helper GIT_CONFIG_VALUE_2='!f() { echo username=box; echo "password=$VIBES_BOX_TOKEN"; }; f'
 git remote set-url origin "$VIBES_GIT_URL"
 
 gitdir=$(git rev-parse --git-dir)
