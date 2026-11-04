@@ -37,7 +37,7 @@ export function Login() {
           />
         ))}
       </div>
-      <div className="login-card">
+      <main className="login-card">
         <h1 className="wordmark">vibes</h1>
         <p>The lights at the Recurse Center.</p>
         {options.data?.rc && (
@@ -49,15 +49,15 @@ export function Login() {
           <form className="dev-login" onSubmit={submit}>
             <label htmlFor="dev-name">Development login: any name works</label>
             <span className="login-row">
-              <input id="dev-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus />
+              <input id="dev-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" maxLength={60} autoFocus />
               <button className="primary" type="submit" disabled={!name.trim() || devLogin.isPending}>
                 Log in
               </button>
             </span>
-            {devLogin.error && <p className="error-text">{devLogin.error.message}</p>}
+            {devLogin.error && <p className="error-text" role="alert">{devLogin.error.message}</p>}
           </form>
         )}
-      </div>
+      </main>
     </div>
   );
 }

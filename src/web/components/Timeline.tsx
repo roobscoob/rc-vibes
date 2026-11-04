@@ -7,14 +7,16 @@
 // A scene's chip dragged onto a row puts the scene there, four bars long
 // (ScenesDrawer.tsx makes its chips draggable while the timeline's open). A
 // block dragged moves, by beats and from row to row; its ends dragged make
-// it shorter or longer; selected (pressed, or reached with Tab), Delete takes
-// it away. Each change is the room's, made at once, for everyone
-// (server/show-timeline.ts); while a block's being dragged, it's shown where
-// it's going.
+// it shorter or longer; selected (pressed, or reached with Tab), the arrows
+// do the same (timeline-keys.ts), and Delete takes it away. A chip's Enter
+// puts its scene at the playhead, on the first row free there. Each change
+// is the room's, made at once, for everyone (server/show-timeline.ts);
+// while a block's being dragged, it's shown where it's going.
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { BEATS_PER_BAR, RESTING_BPM } from "../../shared/show.ts";
 import { endOf, MAX_BEATS, MAX_ROWS, posAt, type Block } from "../../shared/show-timeline.ts";
+import { freeRow, keyMove, type Span } from "./timeline-keys.ts";
 import { rNow, rOfEvent } from "../rtime.ts";
 import { sendBlock, sendTransport, useScenes, useShowClock, useShowPlayhead, useTimeline } from "../scene.ts";
 
@@ -36,8 +38,9 @@ export interface ChipDrag {
 
 let chip: ChipDrag | null = null;
 const chipListeners = new Set<() => void>();
-// Where a chip dropped goes: the timeline's, while it's open.
+// Where a chip dropped goes, and one put there with Enter: the timeline's, while it's open.
 let dropOn: ((d: ChipDrag) => void) | null = null;
+let putOn: ((scene: string) => void) | null = null;
 
 /** The chip being dragged, as it moves (null: none, or it's dropped). */
 export const chipDrag = {
@@ -55,6 +58,9 @@ export const chipDrag = {
 /** A chip let go of: onto the timeline, if it's over a row. */
 export const dropChip = (d: ChipDrag) => dropOn?.(d);
 
+/** A chip's Enter: its scene onto the timeline at the playhead. */
+export const putChip = (scene: string) => putOn?.(scene);
+
 /** The chip being dragged, under the pointer. */
 export function ChipGhost() {
   const d = useSyncExternalStore(chipDrag.subscribe, chipDrag.get);
@@ -67,8 +73,6 @@ export function ChipGhost() {
 
 /** A scene's colour on the timeline: the same for every block of it. */
 const hueOf = (scene: string) => [...scene].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-
-type Span = Pick<Block, "row" | "start" | "end">;
 
 export function Timeline() {
   const timeline = useTimeline();
@@ -101,17 +105,26 @@ export function Timeline() {
     return { row: Math.min(rows - 1, Math.max(0, Math.floor((y - r.top) / ROW_H))), beat: Math.max(0, Math.round((x - r.left) / px)) };
   };
 
-  // A chip dropped on a row: its scene there, four bars long, selected.
+  // A chip dropped on a row, or put at the playhead: its scene there, four bars long, selected.
   useEffect(() => {
+    const put = (scene: string, row: number, beat: number) => {
+      const id = crypto.randomUUID();
+      said(sendBlock(id, { scene, row, start: beat, end: Math.min(MAX_BEATS, beat + NEW_BEATS) }));
+      setSelected(id);
+    };
     dropOn = (d) => {
       const p = at(d.x, d.y);
-      if (!p) return;
-      const id = crypto.randomUUID();
-      said(sendBlock(id, { scene: d.scene, row: p.row, start: p.beat, end: Math.min(MAX_BEATS, p.beat + NEW_BEATS) }));
-      setSelected(id);
+      if (p) put(d.scene, p.row, p.beat);
+    };
+    putOn = (scene) => {
+      const beat = Math.round(posAt(playhead, clock, rNow()));
+      const row = freeRow(Object.values(timeline.blocks), beat, beat + NEW_BEATS);
+      if (row === null) setError("Every row's taken at the playhead.");
+      else put(scene, row, beat);
     };
     return () => {
       dropOn = null;
+      putOn = null;
     };
   });
   const over = drag ? at(drag.x, drag.y) : null;
@@ -140,6 +153,12 @@ export function Timeline() {
     said(sendTransport({ do: "seek", at: rOfEvent(e), t: (beat * 60) / (clock.bpm ?? RESTING_BPM) }));
   };
 
+  // A block put where it's going: shown there till vibes says it is (or a later move's taken over).
+  const place = (id: string, scene: string, span: Span) => {
+    setMoving({ id, span });
+    said(sendBlock(id, { scene, ...span }).finally(() => setMoving((m) => (m?.span === span ? null : m))));
+  };
+
   // A block, or one of its ends, dragged: by beats, and (moved) from row to row; put there as it's let go of.
   const grab = (id: string, b: Block, how: "move" | "start" | "end") => (e: ReactPointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -166,7 +185,7 @@ export function Timeline() {
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
       if (span.row === b.row && span.start === b.start && span.end === b.end) return setMoving(null);
-      said(sendBlock(id, { scene: b.scene, ...span }).finally(() => setMoving((m) => (m?.id === id ? null : m))));
+      place(id, b.scene, span);
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
@@ -174,12 +193,23 @@ export function Timeline() {
   };
 
   const onKey = (e: ReactKeyboardEvent) => {
-    if (!selected || !timeline.blocks[selected]) return;
+    // Only a block's own keys: the ruler, the zoom and the scroller leave the selected block be.
+    if (!(e.target as Element).closest(".tl-block")) return;
+    const b = selected ? timeline.blocks[selected] : undefined;
+    if (!selected || !b) return;
     if (e.key === "Delete" || e.key === "Backspace") {
       said(sendBlock(selected, null));
       setSelected(null);
+      // Focus on to the next block (selecting it), or the timeline, rather than lost with this one.
+      const els = [...(rowsEl.current?.querySelectorAll<HTMLElement>(".tl-block[tabindex]") ?? [])];
+      const i = els.indexOf(e.target as HTMLElement);
+      (els[i + 1] ?? els[i - 1] ?? scroll.current)?.focus();
     } else if (e.key === "Escape") setSelected(null);
-    else return;
+    else {
+      const span = keyMove(e.key, { shift: e.shiftKey, alt: e.altKey }, moving?.id === selected ? moving.span : b);
+      if (!span) return;
+      place(selected, b.scene, span);
+    }
     e.preventDefault();
   };
 
@@ -212,7 +242,7 @@ export function Timeline() {
   const grid = { "--px": `${px}px`, "--bar-px": `${px * BEATS_PER_BAR}px`, "--row-h": `${ROW_H}px` } as CSSProperties;
   return (
     <div className="timeline" onKeyDown={onKey}>
-      <div className="tl-scroll" ref={scroll}>
+      <div className="tl-scroll" ref={scroll} tabIndex={-1}>
         <div className="tl-canvas" style={{ ...grid, width: bars * BEATS_PER_BAR * px + 32 }}>
           <div className="tl-ruler" onPointerDown={seek} aria-hidden="true">
             {Array.from({ length: bars }, (_, n) => (
@@ -230,9 +260,11 @@ export function Timeline() {
                   className={`tl-block${selected === id ? " selected" : ""}${moving?.id === id ? " moving" : ""}${name ? "" : " gone"}`}
                   style={{ left: b.start * px, width: (b.end - b.start) * px, top: b.row * ROW_H, "--hue": hueOf(b.scene) } as CSSProperties}
                   tabIndex={0}
+                  role="button"
+                  aria-roledescription="timeline block"
                   onFocus={() => setSelected(id)}
                   onPointerDown={grab(id, b, "move")}
-                  aria-label={`${name ?? "A scene that's gone"}: bar ${Math.floor(b.start / BEATS_PER_BAR) + 1}, ${b.end - b.start} beats, row ${b.row + 1}`}
+                  aria-label={`${name ?? "Gone"}: bar ${Math.floor(b.start / BEATS_PER_BAR) + 1} beat ${(b.start % BEATS_PER_BAR) + 1}, ${b.end - b.start} beats, row ${b.row + 1}`}
                 >
                   <span className="tl-end start" onPointerDown={grab(id, b, "start")} />
                   <span className="tl-name">{name ?? "Gone"}</span>
@@ -251,7 +283,9 @@ export function Timeline() {
       </div>
       <div className="tl-foot">
         <span className="tl-hint">
-          {blocks.length === 0 ? "Drag a scene onto a row to put it on the timeline." : "Drag a block to move it, its ends to make it longer or shorter. Delete takes it away."}
+          {blocks.length === 0
+            ? "Drag a scene onto a row, or press Enter on it, to put it on the timeline."
+            : "Drag a block or its ends, or use the arrows (Alt: its end). Delete takes it away."}
         </span>
         {error && (
           <span className="dock-error" role="alert">

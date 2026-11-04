@@ -20,7 +20,7 @@ export function UserMenu() {
       <OthersHere />
       <Menu align="end" className="user-button" name={name} label={<Avatar name={name} />}>
         <div className="menu-heading">
-          <span>{name}</span>
+          <span title={name}>{name}</span>
           <button className="menu-item bad" onClick={() => logout.mutate()} disabled={logout.isPending}>
             Log out
           </button>

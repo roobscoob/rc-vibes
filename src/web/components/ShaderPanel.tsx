@@ -5,7 +5,8 @@
 // that asks first). Taking it out is a pending edit like any other;
 // updating, trying again and letting go of one on its way in happen at once.
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
+import { flushSync } from "react-dom";
 import type { Instance, ShaderSketch } from "../../shared/vibes.ts";
 import { isDefaultSketch } from "../../shared/default-sketches.ts";
 import { sameValue, valuesAt, type ParamValue } from "../../shared/params.ts";
@@ -117,12 +118,19 @@ export function OpenCode({ sketch }: { sketch: ShaderSketch }) {
  */
 export function RemoveShader({ layer }: { layer: Layer }) {
   const live = useLiveMode();
-  const [asking, setAsking] = useState(false);
+  // Null until it's asked; false once it's been cancelled, which puts the keyboard back on Delete.
+  const [asking, setAsking] = useState<boolean | null>(null);
   const outside = layer.sketch === null;
-  const out = () => drafts.remove(layer.key);
+  // Taken out, its row is shown going, with Keep it where its actions were: the keyboard goes on to that.
+  const out = (e: MouseEvent<HTMLElement>) => refocusRow(e, () => drafts.remove(layer.key), ".shader-actions button");
   if (!asking) {
     return (
-      <button className="quiet danger shader-action shader-delete" aria-label="Delete" onClick={() => (live || outside ? setAsking(true) : out())}>
+      <button
+        className="quiet danger shader-action shader-delete"
+        aria-label="Delete"
+        autoFocus={asking === false}
+        onClick={(e) => (live || outside ? setAsking(true) : out(e))}
+      >
         <TrashIcon />
       </button>
     );
@@ -136,11 +144,25 @@ export function RemoveShader({ layer }: { layer: Layer }) {
       <button className="quiet danger" onClick={out}>
         Take it out
       </button>
-      <button className="quiet" onClick={() => setAsking(false)}>
+      <button className="quiet" autoFocus onClick={() => setAsking(false)}>
         Cancel
       </button>
     </div>
   );
+}
+
+/**
+ * Changes a layer from a button in its row in the layers panel (taking it
+ * out, keeping it), then puts the keyboard on this in the row as it's drawn
+ * now, rather than letting it drop to the page with the button: found by the
+ * row's place in its list, as it's the same place but not the same element.
+ */
+export function refocusRow(e: MouseEvent<HTMLElement>, change: () => void, selector: string) {
+  const row = e.currentTarget.closest("li");
+  const list = row?.parentElement;
+  const at = list ? [...list.children].indexOf(row!) : -1;
+  flushSync(change);
+  list?.children[at]?.querySelector<HTMLElement>(selector)?.focus();
 }
 
 /**

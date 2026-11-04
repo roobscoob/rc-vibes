@@ -6,7 +6,7 @@
 // what's done to it on the right), and Fields (Field.tsx) are its rows: one
 // layout, one spacing, left and right.
 
-import { forwardRef, type HTMLAttributes, type ReactNode, type RefObject } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode, type RefObject } from "react";
 
 interface SidebarProps {
   side: "left" | "right";
@@ -19,10 +19,10 @@ interface SidebarProps {
   /** Its own extra classes (the selection's sheet's states, on a phone). */
   className?: string;
   style?: HTMLAttributes<HTMLElement>["style"];
-  /** The head: before its title, a grabber, and what takes a drag (the sheet's). */
+  /** The head: before its title, a grabber (a button, for the keyboard), and what takes a drag (the sheet's). */
   headRef?: RefObject<HTMLDivElement | null>;
   headProps?: HTMLAttributes<HTMLDivElement>;
-  grabber?: boolean;
+  grabber?: ButtonHTMLAttributes<HTMLButtonElement>;
   bodyRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
@@ -35,7 +35,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
   return (
     <aside ref={ref} className={["sidebar", side, className].filter(Boolean).join(" ")} aria-label={label} style={style}>
       <div className="sidebar-head" ref={headRef} {...headProps}>
-        {grabber && <span className="sidebar-grabber" aria-hidden="true" />}
+        {grabber && <button className="sidebar-grabber" {...grabber} />}
         <h2 className="sidebar-title">{head}</h2>
         {actions}
       </div>

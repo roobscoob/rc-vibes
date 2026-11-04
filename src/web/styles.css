@@ -255,6 +255,16 @@ button:disabled {
   border-radius: 6px;
 }
 
+/* Said to screen readers only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 input {
   font: inherit;
   color: var(--ink);
@@ -621,10 +631,18 @@ kbd {
 
 /* Editing a layer's domain (ShadersPanel.tsx), a button under its Domain, lit while it is. */
 /* Focus and Edit, over a layer's Domain: a row of their own, each half of
-   it (or, with only Focus, all of it). */
+   it (or, with only Focus, all of it), and, for one made outside vibes, its
+   Delete square at the end, its confirm wrapping under them all. */
 .layer-modes {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.layer-modes > button.quiet.shader-delete {
+  flex: none;
+  width: 30px;
+  padding: 0;
 }
 
 .layer-modes > button.quiet {
@@ -733,7 +751,7 @@ kbd {
   color: var(--faint);
 }
 
-/* Lit: solid blue, the icon dark on it, glowing. */
+/* Lit: solid pink (unsaved changes' accent), the icon dark on it, glowing. */
 .save-button.lit {
   background: var(--sim);
   color: #2a0d11;
@@ -1088,6 +1106,13 @@ kbd {
   clip-path: inset(var(--stuck-by, 0px) 0 0 0);
 }
 
+/* A row that's always open (the layers panel's) shows it with no Reveal
+   round it: its top margin is outside it, between it and the head, and its
+   clip reaches past its other edges so a focus ring there isn't cut off. */
+.layer.open > .layer-details {
+  clip-path: inset(calc(var(--stuck-by, 0px) - 16px) -8px -8px -8px);
+}
+
 /* Under a row's head, a hairline between it and what it shows, the whole
    width of the row: on the head itself (and its stop's piece of the rail,
    the head reaching back over the gap to it), so it goes wherever the head's
@@ -1439,10 +1464,6 @@ kbd {
   font-weight: 700;
 }
 
-.add-sketch-head p {
-  font-size: 12.5px;
-}
-
 /* Along the head's right: swapping to the deleted sketches (or back), then the close. */
 .add-sketch-head-actions {
   display: flex;
@@ -1477,6 +1498,8 @@ kbd {
   margin: 0 -20px;
   padding: 4px 20px 20px;
   overflow-y: auto;
+  /* A card Tab scrolls to keeps its focus ring in view. */
+  scroll-padding-block: 8px;
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
 }
@@ -1581,10 +1604,14 @@ button.quiet.add-sketch-section-action {
   justify-content: center;
   background: none;
   box-shadow: none;
-  outline: 1px dashed var(--line-2);
-  outline-offset: -1px;
   color: var(--ink-2);
   text-align: center;
+}
+
+/* The dash, but not while it's focused: then it's the app's own ring. */
+.add-sketch-new:not(:focus-visible) {
+  outline: 1px dashed var(--line-2);
+  outline-offset: -1px;
 }
 
 .add-sketch-new svg {
@@ -1598,15 +1625,18 @@ button.quiet.add-sketch-section-action {
 .add-sketch-new:hover {
   transform: none;
   box-shadow: none;
-  outline-color: var(--faint);
   color: var(--ink);
+}
+
+.add-sketch-new:hover:not(:focus-visible),
+.add-sketch-new.naming {
+  outline-color: var(--faint);
 }
 
 .add-sketch-new.naming {
   justify-content: space-between;
   gap: 10px;
   padding: 12px;
-  outline-color: var(--faint);
   text-align: left;
 }
 
@@ -1922,12 +1952,14 @@ button.quiet.add-sketch-section-action {
   font-size: 12.5px;
 }
 
-.shader-actions button.quiet {
+.shader-actions button.quiet,
+.layer-modes .confirm-delete button.quiet {
   height: 28px;
   padding: 0 10px;
 }
 
-.shader-actions .confirm-delete {
+.shader-actions .confirm-delete,
+.layer-modes .confirm-delete {
   flex-basis: 100%;
 }
 
@@ -1937,19 +1969,23 @@ button.quiet.add-sketch-section-action {
   gap: 7px;
 }
 
-.shader-actions .confirm-delete {
+.shader-actions .confirm-delete,
+.layer-modes .confirm-delete {
   justify-content: flex-start;
 }
 
 /* Taking a layer out (or not adding it): like the other actions until it's
    pointed at, then red, as a card menu's Delete is (not the warning orange
    quiet danger buttons have elsewhere). */
-.shader-actions button.quiet.danger {
+.shader-actions button.quiet.danger,
+.layer-modes button.quiet.danger {
   color: var(--ink-2);
 }
 
 .shader-actions button.quiet.danger:hover:not(:disabled),
-.shader-actions button.quiet.danger:focus-visible {
+.shader-actions button.quiet.danger:focus-visible,
+.layer-modes button.quiet.danger:hover:not(:disabled),
+.layer-modes button.quiet.danger:focus-visible {
   background: rgb(66 26 22 / 0.8);
   color: var(--bad);
 }
@@ -2069,11 +2105,32 @@ button.layer-chevron:hover {
   cursor: pointer;
 }
 
-/* The right panel's heads are the buttons that open their rows: ringed for the keyboard. */
-.layer-head.toggle[role="button"]:focus-visible {
+/* A head's name is its button for the keyboard (the head holds other
+   controls, which can't be inside one): it rings the whole head, as the
+   head is what the pointer clicks. */
+.layer-head.toggle:has(.layer-name-button:focus-visible) {
   outline: 2px solid var(--ink-2);
   outline-offset: -2px;
   border-radius: 8px;
+}
+
+.layer-name-button:focus-visible {
+  outline: none;
+}
+
+/* In the layers panel, a real button, its asterisk beside it: it gives way
+   to a long name rather than the asterisk being cut off. */
+.shader-row .layer-name {
+  display: flex;
+  align-items: center;
+}
+
+button.layer-name-button {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
 }
 
 /* The base tone's color, under its row, in the rail's other column, inset as a shader's details are. */
@@ -2525,17 +2582,25 @@ button.layer-chevron:hover {
     -webkit-user-select: none;
   }
 
-  /* The grabber says the sheet moves; the whole head is what takes the pull. */
+  /* The grabber says the sheet moves; the whole head is what takes the pull.
+     It's a button too, for the keyboard: a target round the bar it draws. */
   .sidebar-grabber {
     position: absolute;
-    top: 7px;
+    top: 0;
     left: 50%;
-    display: block;
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 19px;
+    transform: translateX(-50%);
+  }
+
+  .sidebar-grabber::before {
+    content: "";
     width: 36px;
     height: 5px;
     border-radius: 3px;
     background: var(--line-2);
-    transform: translateX(-50%);
   }
 
   /* The floors, zoom and drawer ride up above the sheet, keeping up with it frame by frame. */
@@ -2799,7 +2864,9 @@ button.layer-chevron:hover {
   top: calc(100% + 8px);
   z-index: 30;
   min-width: 270px;
+  /* Never wider than the screen, whatever a long name asks for. */
   width: max-content;
+  max-width: calc(100vw - 2 * var(--gap));
   padding: 6px;
   background: var(--solid-2);
   border-radius: 14px;
@@ -2847,7 +2914,16 @@ button.layer-chevron:hover {
   font-weight: 650;
 }
 
+/* A long name gives way to the button beside it. */
+.menu-heading > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menu-heading .menu-item {
+  flex: none;
   width: auto;
   padding: 6px 10px;
   font-weight: 500;
@@ -3069,29 +3145,71 @@ input.tempo-bpm {
 
 /* The scenes (ScenesDrawer.tsx): a pill each, its number and name, lit while
    the room looks like it, and its menu; wrapping onto another row past what
-   fits (a scrolling row would cut their menus off). Under the show's row,
-   when there is one, with a line between. */
+   fits, and scrolling past two, so the dock (and the map's corner above it,
+   on --dock-h) stays put however many there are. Under the show's row, when
+   there is one, with a line between. */
 .show-dock > .dock-bar + .dock-bar {
   border-top: 1px solid var(--edge);
 }
 
 /* The chips take what's left of the row; with too little for them, a row of their own. */
 .scenes-bar {
+  position: relative;
   flex-wrap: wrap;
   align-items: flex-start;
 }
 
+/* Two rows and half of a third, showing there are more to scroll to; and
+   room round them for a chip's focus ring. */
 .scenes {
   display: flex;
   flex: 1 1 180px;
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+  max-height: calc(2.5 * var(--dock-pill) + 2 * 6px + 4px);
+  margin: -2px;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+/* Narrow: one row of chips, scrolled sideways, beside the cue if it fits. */
+@media (max-width: 800px) {
+  .scenes {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .scene-chip {
+    flex: none;
+  }
+}
+
+/* A chip's menu goes from the scenes' row, outside the scrolling chips, set
+   over the chip it's for (--chip-*: ScenesDrawer.tsx). */
+.scene-chip .menu {
+  position: static;
+}
+
+.scene-chip .menu.above .menu-panel {
+  bottom: calc(var(--chip-below, 100%) + 8px);
+}
+
+.scene-chip .menu.start .menu-panel {
+  left: var(--chip-left, 0);
+}
+
+.scene-chip .menu.end .menu-panel {
+  right: var(--chip-right, 0);
+}
+
+/* A long name gives way, its number kept. */
 .scene-chip {
   display: flex;
   align-items: center;
+  min-width: 0;
+  max-width: min(100%, 240px);
   height: var(--dock-pill);
   padding: var(--dock-inset);
   border-radius: 999px;
@@ -3124,9 +3242,39 @@ input.tempo-bpm {
   color: var(--ink);
 }
 
+.scene-apply {
+  min-width: 0;
+}
+
 .scene-apply small {
+  flex: none;
   color: var(--mute);
   font-size: 10px;
+}
+
+.scene-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Its heading, the scene's whole name, gives way to the menu's width rather than setting it. */
+.scene-chip .menu-heading {
+  display: block;
+  width: 0;
+  min-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A field's hint, under its name. */
+.menu-field small {
+  display: block;
+  margin-top: 2px;
+  color: var(--mute);
+  font-size: 11.5px;
+  font-weight: 400;
+  white-space: normal;
 }
 
 .scene-apply:hover:not(:disabled),
@@ -3222,6 +3370,13 @@ input.tempo-bpm {
   touch-action: none;
 }
 
+/* On a phone the chips are a row that scrolls sideways under a finger; a drag onto the timeline still starts after its few pixels. */
+@media (max-width: 800px) {
+  .scene-chip.draggable .scene-apply {
+    touch-action: pan-x;
+  }
+}
+
 /* The chip being dragged, under the pointer. */
 .chip-ghost {
   position: fixed;
@@ -3252,10 +3407,16 @@ input.tempo-bpm {
 
 .tl-scroll {
   overflow: auto;
-  max-height: 40vh;
+  max-height: 25dvh;
   border-radius: 10px;
   background: var(--well);
   overscroll-behavior: contain;
+}
+
+@media (max-width: 800px) {
+  .tl-scroll {
+    max-height: 18dvh;
+  }
 }
 
 .tl-canvas {
@@ -3389,11 +3550,34 @@ input.tempo-bpm {
 
 .tl-hint {
   min-width: 0;
-  overflow: hidden;
   color: var(--mute);
   font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* Fingers: the dock's controls bigger to tap, and a block's ends wider to
+   catch (inward, as the block cuts off what's past its edges). */
+@media (pointer: coarse) {
+  .show-dock {
+    --dock-control: 40px;
+  }
+
+  .tl-end {
+    position: relative;
+  }
+
+  .tl-end::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .tl-end.start::after {
+    right: -14px;
+  }
+
+  .tl-end.end::after {
+    left: -14px;
+  }
 }
 
 /* Admin mode's clock readout (ClockSync.tsx), beside the map's delay: how
@@ -3592,7 +3776,7 @@ input.tempo-bpm {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
-  color: var(--faint);
+  color: var(--mute);
   font-size: 11px;
 }
 
@@ -3924,6 +4108,11 @@ button.tag-name:hover {
   display: block;
   touch-action: none;
   cursor: default;
+}
+
+/* It fills the window: its focus ring is drawn inside it. */
+.map-canvas:focus-visible {
+  outline-offset: -2px;
 }
 
 .map-canvas.pointing {
@@ -4297,6 +4486,7 @@ button.tag-name:hover {
 .tooltip.fixed {
   position: fixed;
   z-index: 100;
+  max-width: calc(100vw - 16px);
 }
 
 /* A tone picker's ball under the pointer (ColorField.tsx): its color, then

@@ -127,21 +127,30 @@ export function Transport() {
     if (bpm !== null) void act({ do: "tempo", bpm, at: rOfEvent(e), onBeat: true });
   };
 
+  // Typed, and Enter: kept, or (not one) left there to be put right, with what it should be.
   const timeKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const t = parseClockText(typedTime ?? "");
-      if (t !== null) void act({ do: "seek", at: rOfEvent(e), t });
+      if (t === null) return setError("A time is m:ss, like 1:30.");
+      void act({ do: "seek", at: rOfEvent(e), t });
       setTypedTime(null);
     }
-    if (e.key === "Escape") setTypedTime(null);
+    if (e.key === "Escape") {
+      setTypedTime(null);
+      setError(null);
+    }
   };
   const bpmKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const bpm = Number(typedBpm);
-      if (typedBpm?.trim() && bpm >= MIN_BPM && bpm <= MAX_BPM) void act({ do: "tempo", bpm: Math.round(bpm * 10) / 10, at: rOfEvent(e) });
+      if (!typedBpm?.trim() || !(bpm >= MIN_BPM && bpm <= MAX_BPM)) return setError(`A tempo is ${MIN_BPM} to ${MAX_BPM} BPM.`);
+      void act({ do: "tempo", bpm: Math.round(bpm * 10) / 10, at: rOfEvent(e) });
       setTypedBpm(null);
     }
-    if (e.key === "Escape") setTypedBpm(null);
+    if (e.key === "Escape") {
+      setTypedBpm(null);
+      setError(null);
+    }
   };
 
   // P, T and B, away from anything typed in.
@@ -169,7 +178,7 @@ export function Transport() {
           {clock.playing ? "❚❚" : "▶"}
         </button>
         {typedTime === null ? (
-          <button className="transport-time mono" ref={time} onClick={() => setTypedTime(clockText(timeAt(clock, rNow())))} aria-label="Set the time (m:ss)">
+          <button className="transport-time mono" ref={time} onClick={() => setTypedTime(clockText(timeAt(clock, rNow())))} title="Set the time (m:ss)">
             {clockText(timeAt(clock, rNow()))}
           </button>
         ) : (
@@ -180,7 +189,10 @@ export function Transport() {
             size={5}
             onChange={(e) => setTypedTime(e.target.value)}
             onKeyDown={timeKey}
-            onBlur={() => setTypedTime(null)}
+            onBlur={() => {
+              setTypedTime(null);
+              setError(null);
+            }}
             aria-label="The time, m:ss"
           />
         )}
@@ -193,7 +205,7 @@ export function Transport() {
           <span ref={light} className="tempo-light" />
         </span>
         {typedBpm === null ? (
-          <button className="tempo-bpm mono" onClick={() => setTypedBpm(clock.bpm === null ? "120" : bpmText(clock.bpm))} aria-label="The tempo, in beats a minute: click to type one">
+          <button className="tempo-bpm mono" onClick={() => setTypedBpm(clock.bpm === null ? "120" : bpmText(clock.bpm))} title="The tempo: click to type one">
             {clock.bpm === null ? "—" : bpmText(clock.bpm)}
             <small> BPM</small>
           </button>
@@ -206,7 +218,10 @@ export function Transport() {
             inputMode="decimal"
             onChange={(e) => setTypedBpm(e.target.value)}
             onKeyDown={bpmKey}
-            onBlur={() => setTypedBpm(null)}
+            onBlur={() => {
+              setTypedBpm(null);
+              setError(null);
+            }}
             aria-label="Beats a minute"
           />
         )}

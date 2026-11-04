@@ -11,7 +11,9 @@ import { createRepo, headOf, repoPath } from "./git.ts";
 
 const run = promisify(execFile);
 const SCRIPT = path.join(import.meta.dirname, "../../box/publish.sh");
-const env = (home: string) => ({ ...process.env, HOME: home, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" });
+// git's global config is the home's own, as in a box: GIT_CONFIG_GLOBAL from
+// the machine running the tests would otherwise win over HOME.
+const env = (home: string) => ({ ...process.env, HOME: home, GIT_CONFIG_GLOBAL: path.join(home, ".gitconfig"), GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" });
 const git = (home: string, cwd: string, ...args: string[]) => run("git", args, { cwd, env: env(home) });
 
 let dir: string;
@@ -83,6 +85,15 @@ describe("publishing someone's changes", () => {
     expect((await git(s.home, s.clone, "status", "--porcelain")).stdout).toBe("");
     expect((await git(s.home, s.clone, "rev-parse", "HEAD", "origin/main")).stdout.split("\n").slice(0, 2)).toEqual([await s.main(), await s.main()]);
     expect((await git(s.home, s.clone, "log", "-1", "--format=%an %s")).stdout.trim()).toBe("Rose Added to the room with these changes");
+  });
+
+  it("writes no git config, so it changes nothing outside the clone wherever it's run", async () => {
+    const s = await sketch();
+    await writeFile(path.join(s.clone, "main.ts"), "wave faster\n");
+    const before = await readFile(path.join(s.clone, ".git", "config"), "utf8");
+    expect((await s.publish()).code).toBe(0);
+    expect(existsSync(path.join(s.home, ".gitconfig"))).toBe(false);
+    expect((await readFile(path.join(s.clone, ".git", "config"), "utf8")).replace(/url = .*/, "")).toBe(before.replace(/url = .*/, ""));
   });
 
   it("puts their commits on top of what's been pushed since, in one line", async () => {

@@ -4,7 +4,7 @@
 // a point (CSS px, in its container, or on the screen with `fixed`), on one
 // side of it. It never takes the pointer.
 
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export type TooltipSide = "right" | "left" | "above" | "below";
@@ -27,9 +27,22 @@ interface Props {
   children: ReactNode;
 }
 
+// How near the screen's edge a card on the screen may come.
+const EDGE = 8;
+
 export function Tooltip({ x, y, side, fixed = false, className, children }: Props) {
+  // On the screen, a card by something near its edge is slid back along it, onto the screen.
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!fixed || !el) return;
+    el.style.translate = "";
+    const r = el.getBoundingClientRect();
+    const dx = Math.max(EDGE - r.left, Math.min(0, innerWidth - EDGE - r.right));
+    el.style.translate = dx ? `${dx}px 0` : "";
+  });
   const card = (
-    <div className={["tooltip", fixed && "fixed", className].filter(Boolean).join(" ")} style={{ left: x, top: y, transform: SHIFT[side] }} role="tooltip">
+    <div ref={ref} className={["tooltip", fixed && "fixed", className].filter(Boolean).join(" ")} style={{ left: x, top: y, transform: SHIFT[side] }} role="tooltip">
       {children}
     </div>
   );

@@ -4,7 +4,7 @@
 // this page is just the way in. The library of sketches is the dialog on
 // the room's page (components/AddSketch.tsx).
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { boxCommitFolder, type Sketch } from "../../shared/vibes.ts";
 import { RequestError, useBox, useDeleteSketch, useRestoreSketch, useSketch } from "../api.ts";
 import { Brand } from "../components/Brand.tsx";
@@ -41,7 +41,6 @@ function TopBar({ children, actions }: { children: ReactNode; actions?: ReactNod
       </Link>
       <span className="crumb-sep">/</span>
       {children}
-      <span className="spacer" />
       {actions}
       <UserMenu />
     </header>
@@ -67,7 +66,8 @@ function DeleteSketch({ sketch }: { sketch: Sketch }) {
       <button className="quiet danger" disabled={remove.isPending} onClick={() => remove.mutate(sketch.id, { onSuccess: () => navigate("/") })}>
         Delete it
       </button>
-      <button className="quiet" onClick={() => setAsking(false)}>
+      {/* Focus starts on the way back out, so it isn't lost with the Delete button. */}
+      <button className="quiet" autoFocus onClick={() => setAsking(false)}>
         Cancel
       </button>
       {remove.isError && <span className="error-text">{remove.error.message}</span>}
@@ -79,6 +79,14 @@ function SketchPage({ id }: { id: string }) {
   const sketch = useSketch(id);
   const deleted = sketch.data?.deleted;
   const restore = useRestoreSketch();
+  // Where focus goes once it's restored, so it isn't lost with the Restore button.
+  const main = useRef<HTMLElement>(null);
+  const name = sketch.data?.name;
+  useEffect(() => {
+    if (!name) return;
+    document.title = `${name} · vibes`;
+    return () => void (document.title = "vibes");
+  }, [name]);
   // At one commit (?commit=), it opens in a checkout of just that commit, beside
   // your clone (the extension makes it): what a shader in the room was built
   // from. Without, it's your clone, on your branch.
@@ -113,43 +121,45 @@ function SketchPage({ id }: { id: string }) {
         <nav className="crumbs">
           {commit ? (
             <>
-              <Link to={`/sketches/${id}`} className="crumb-name">
-                {sketch.data?.name ?? "…"}
-              </Link>
+              <h1 className="crumb-name">
+                <Link to={`/sketches/${id}`}>{name ?? "…"}</Link>
+              </h1>
               <span className="crumb-sep">@</span>
               <span className="crumb-commit">
                 {commit.slice(0, 7)}
               </span>
             </>
           ) : (
-            <span className="crumb-name">{sketch.data?.name ?? "…"}</span>
+            <h1 className="crumb-name">{name ?? "…"}</h1>
           )}
         </nav>
       </TopBar>
-      {sketch.isError ? (
-        <Notice>
-          Couldn't open this sketch: {sketch.error.message}. <Link to="/">Back to the room</Link>
-        </Notice>
-      ) : deleted ? (
-        <Notice>
-          <b>{sketch.data!.name}</b> was deleted {ago(deleted.at)} by {deleted.by}. Anyone can restore it.{" "}
-          <button className="quiet" disabled={restore.isPending} onClick={() => restore.mutate(id)}>
-            Restore it
-          </button>{" "}
-          <Link to="/">Back to the room</Link>
-        </Notice>
-      ) : shown ? (
-        <div className="box-stage">
-          <iframe key={`${shown.run} ${shown.url}`} className="box-frame" src={shown.url} aria-label={`${sketch.data?.name ?? "The sketch"} in VS Code`} allow="clipboard-read; clipboard-write" />
-          {!ready && <div className={failure ? "box-notice box-cover" : "box-notice box-cover starting"}>{failure ? <p>{failure}</p> : <p>Waking your VS Code…</p>}</div>}
-        </div>
-      ) : failure ? (
-        <Notice>{failure}</Notice>
-      ) : (
-        <Notice starting>
-          Starting your VS Code, with your own copy of {sketch.data ? <b>{sketch.data.name}</b> : "the sketch"}…
-        </Notice>
-      )}
+      <main ref={main} className="sketch-main" tabIndex={-1}>
+        {sketch.isError ? (
+          <Notice>
+            Couldn't open this sketch: {sketch.error.message}. <Link to="/">Back to the room</Link>
+          </Notice>
+        ) : deleted ? (
+          <Notice>
+            <b>{sketch.data!.name}</b> was deleted {ago(deleted.at)} by {deleted.by}. Anyone can restore it.{" "}
+            <button className="quiet" disabled={restore.isPending} onClick={() => restore.mutate(id, { onSuccess: () => main.current?.focus() })}>
+              Restore it
+            </button>{" "}
+            <Link to="/">Back to the room</Link>
+          </Notice>
+        ) : shown ? (
+          <div className="box-stage">
+            <iframe key={`${shown.run} ${shown.url}`} className="box-frame" src={shown.url} aria-label={`${sketch.data?.name ?? "The sketch"} in VS Code`} allow="clipboard-read; clipboard-write" />
+            {!ready && <div className={failure ? "box-notice box-cover" : "box-notice box-cover starting"}>{failure ? <p>{failure}</p> : <p>Waking your VS Code…</p>}</div>}
+          </div>
+        ) : failure ? (
+          <Notice>{failure}</Notice>
+        ) : (
+          <Notice starting>
+            Starting your VS Code, with your own copy of {sketch.data ? <b>{sketch.data.name}</b> : "the sketch"}…
+          </Notice>
+        )}
+      </main>
     </div>
   );
 }

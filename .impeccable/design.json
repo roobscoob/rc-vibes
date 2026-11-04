@@ -1,0 +1,532 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T02:57:45.057Z",
+  "title": "Design System: vibes",
+  "extensions": {
+    "colorMeta": {
+      "void": {
+        "role": "neutral",
+        "displayName": "Void",
+        "canonical": "#070708",
+        "oklch": "oklch(12.9% 0.003 286)",
+        "tonalRamp": [
+          "oklch(15% 0.001 286)",
+          "oklch(27% 0.002 286)",
+          "oklch(39% 0.003 286)",
+          "oklch(51% 0.003 286)",
+          "oklch(63% 0.003 286)",
+          "oklch(75% 0.002 286)",
+          "oklch(86% 0.001 286)",
+          "oklch(95% 0.001 286)"
+        ]
+      },
+      "solid": {
+        "role": "neutral",
+        "displayName": "Solid",
+        "canonical": "#161514",
+        "oklch": "oklch(19.6% 0.003 68)",
+        "tonalRamp": [
+          "oklch(15% 0.001 68)",
+          "oklch(27% 0.002 68)",
+          "oklch(39% 0.003 68)",
+          "oklch(51% 0.003 68)",
+          "oklch(63% 0.003 68)",
+          "oklch(75% 0.002 68)",
+          "oklch(86% 0.001 68)",
+          "oklch(95% 0.001 68)"
+        ]
+      },
+      "solid-2": {
+        "role": "neutral",
+        "displayName": "Solid Raised",
+        "canonical": "#1f1e1c",
+        "oklch": "oklch(23.5% 0.004 85)",
+        "tonalRamp": [
+          "oklch(15% 0.002 85)",
+          "oklch(27% 0.003 85)",
+          "oklch(39% 0.004 85)",
+          "oklch(51% 0.004 85)",
+          "oklch(63% 0.004 85)",
+          "oklch(75% 0.003 85)",
+          "oklch(86% 0.002 85)",
+          "oklch(95% 0.001 85)"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Lamp Ink",
+        "canonical": "#f5f1ea",
+        "oklch": "oklch(95.9% 0.010 82)",
+        "tonalRamp": [
+          "oklch(15% 0.004 82)",
+          "oklch(27% 0.008 82)",
+          "oklch(39% 0.010 82)",
+          "oklch(51% 0.010 82)",
+          "oklch(63% 0.010 82)",
+          "oklch(75% 0.007 82)",
+          "oklch(86% 0.004 82)",
+          "oklch(95% 0.003 82)"
+        ]
+      },
+      "on-ink": {
+        "role": "neutral",
+        "displayName": "On Ink",
+        "canonical": "#141311",
+        "oklch": "oklch(18.7% 0.004 85)",
+        "tonalRamp": [
+          "oklch(15% 0.002 85)",
+          "oklch(27% 0.003 85)",
+          "oklch(39% 0.004 85)",
+          "oklch(51% 0.004 85)",
+          "oklch(63% 0.004 85)",
+          "oklch(75% 0.003 85)",
+          "oklch(86% 0.002 85)",
+          "oklch(95% 0.001 85)"
+        ]
+      },
+      "bad": {
+        "role": "tertiary",
+        "displayName": "Ember Red",
+        "canonical": "#ff7d6b",
+        "oklch": "oklch(73.6% 0.162 30)",
+        "tonalRamp": [
+          "oklch(15% 0.068 30)",
+          "oklch(27% 0.122 30)",
+          "oklch(39% 0.162 30)",
+          "oklch(51% 0.162 30)",
+          "oklch(63% 0.162 30)",
+          "oklch(75% 0.113 30)",
+          "oklch(86% 0.063 30)",
+          "oklch(95% 0.040 30)"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Lamp Amber",
+        "canonical": "#f5c066",
+        "oklch": "oklch(83.8% 0.124 79)",
+        "tonalRamp": [
+          "oklch(15% 0.052 79)",
+          "oklch(27% 0.093 79)",
+          "oklch(39% 0.124 79)",
+          "oklch(51% 0.124 79)",
+          "oklch(63% 0.124 79)",
+          "oklch(75% 0.087 79)",
+          "oklch(86% 0.048 79)",
+          "oklch(95% 0.031 79)"
+        ]
+      },
+      "sim": {
+        "role": "secondary",
+        "displayName": "Unsaved Pink",
+        "canonical": "#ff9fa8",
+        "oklch": "oklch(80.2% 0.115 14)",
+        "tonalRamp": [
+          "oklch(15% 0.048 14)",
+          "oklch(27% 0.087 14)",
+          "oklch(39% 0.115 14)",
+          "oklch(51% 0.115 14)",
+          "oklch(63% 0.115 14)",
+          "oklch(75% 0.080 14)",
+          "oklch(86% 0.045 14)",
+          "oklch(95% 0.029 14)"
+        ],
+        "glowChannels": "255 159 168"
+      },
+      "focus": {
+        "role": "secondary",
+        "displayName": "Focus Blue",
+        "canonical": "#8fb9ff",
+        "oklch": "oklch(78.3% 0.110 260)",
+        "tonalRamp": [
+          "oklch(15% 0.046 260)",
+          "oklch(27% 0.083 260)",
+          "oklch(39% 0.110 260)",
+          "oklch(51% 0.110 260)",
+          "oklch(63% 0.110 260)",
+          "oklch(75% 0.077 260)",
+          "oklch(86% 0.043 260)",
+          "oklch(95% 0.028 260)"
+        ]
+      },
+      "focus-ink": {
+        "role": "secondary",
+        "displayName": "Focus Ink",
+        "canonical": "#0b1424",
+        "oklch": "oklch(19.2% 0.035 261)",
+        "tonalRamp": [
+          "oklch(15% 0.015 261)",
+          "oklch(27% 0.027 261)",
+          "oklch(39% 0.035 261)",
+          "oklch(51% 0.035 261)",
+          "oklch(63% 0.035 261)",
+          "oklch(75% 0.025 261)",
+          "oklch(86% 0.014 261)",
+          "oklch(95% 0.009 261)"
+        ]
+      },
+      "plan-line": {
+        "role": "neutral",
+        "displayName": "Plan Line",
+        "canonical": "#302e2b",
+        "oklch": "oklch(30.2% 0.006 78)",
+        "tonalRamp": [
+          "oklch(15% 0.003 78)",
+          "oklch(27% 0.005 78)",
+          "oklch(39% 0.006 78)",
+          "oklch(51% 0.006 78)",
+          "oklch(63% 0.006 78)",
+          "oklch(75% 0.004 78)",
+          "oklch(86% 0.002 78)",
+          "oklch(95% 0.002 78)"
+        ]
+      },
+      "plan-text": {
+        "role": "neutral",
+        "displayName": "Plan Text",
+        "canonical": "#57534e",
+        "oklch": "oklch(44.4% 0.010 74)",
+        "tonalRamp": [
+          "oklch(15% 0.004 74)",
+          "oklch(27% 0.007 74)",
+          "oklch(39% 0.010 74)",
+          "oklch(51% 0.010 74)",
+          "oklch(63% 0.010 74)",
+          "oklch(75% 0.007 74)",
+          "oklch(86% 0.004 74)",
+          "oklch(95% 0.002 74)"
+        ]
+      },
+      "glass": {
+        "role": "neutral",
+        "displayName": "Smoked Glass",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "glass-strong": {
+        "role": "neutral",
+        "displayName": "Dense Glass",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "edge": {
+        "role": "neutral",
+        "displayName": "Glass Edge",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "fill": {
+        "role": "neutral",
+        "displayName": "Fill",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "fill-2": {
+        "role": "neutral",
+        "displayName": "Fill Hover",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "fill-3": {
+        "role": "neutral",
+        "displayName": "Fill Raised",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "well": {
+        "role": "neutral",
+        "displayName": "Well",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink 74%",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "mute": {
+        "role": "neutral",
+        "displayName": "Mute",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "note": "Translucent overlay over the map or a panel; no tonal ramp."
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The login page wordmark only, with a warm text glow (0 0 60px rgb(255 200 140 / 0.35))."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "A sidebar's title."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The wordmark in bars."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The default for everything (set on body)."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Buttons, chips, segmented options, banners; 650 for primary buttons and emphasis."
+      },
+      "hint": {
+        "displayName": "Hint",
+        "purpose": "Hints, error text, tooltips."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase mono captions over a group of controls, in mute."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Counts, values, scale bar, floor numbers. 400 and 700 only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 18px 48px rgb(0 0 0 / 0.42)",
+        "purpose": "Every glass surface over the map (--float)."
+      },
+      {
+        "name": "glass-rim",
+        "value": "inset 0 0 0 1px var(--edge), inset 0 1px 0 rgb(255 255 255 / 0.03)",
+        "purpose": "Paired with float on glass."
+      },
+      {
+        "name": "chip-lift",
+        "value": "0 2px 8px rgb(0 0 0 / 0.35)",
+        "purpose": "Small glass pills in the HUD (tag chips, avatars)."
+      },
+      {
+        "name": "menu-drop",
+        "value": "inset 0 0 0 1px var(--line-2), 0 20px 50px rgb(0 0 0 / 0.55)",
+        "purpose": "Menus on solid ground."
+      },
+      {
+        "name": "signal-glow",
+        "value": "0 0 12px rgb(var(--sim-glow) / 0.45), 0 0 2px rgb(var(--sim-glow) / 0.6)",
+        "purpose": "A lit signal (save button; the layer-mode icon in focus blue). Hover: 18px/0.6 and 3px/0.8."
+      },
+      {
+        "name": "focus-window",
+        "value": "inset 0 0 0 1.5px color-mix(in srgb, var(--focus) 70%, transparent), inset 0 0 24px color-mix(in srgb, var(--focus) 12%, transparent), inset 0 0 54px color-mix(in srgb, var(--focus) 9%, transparent)",
+        "purpose": "The map's window while a layer is in focus or its domain is edited."
+      }
+    ],
+    "blur": {
+      "name": "blur",
+      "value": "blur(22px) saturate(1.5)",
+      "purpose": "Backdrop filter for all glass (--blur)."
+    },
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 0.8, 0.24, 1)",
+        "purpose": "Default easing for things that move (--ease-out)."
+      },
+      {
+        "name": "ease-thumb",
+        "value": "cubic-bezier(0.3, 0.7, 0.2, 1)",
+        "purpose": "The segmented thumb's slide, 0.24s."
+      },
+      {
+        "name": "color",
+        "value": "0.15s",
+        "purpose": "Background and color changes on hover."
+      },
+      {
+        "name": "pop-in",
+        "value": "0.16s var(--ease-out)",
+        "purpose": "Menus: from 4px away at 0.98 scale."
+      },
+      {
+        "name": "breathe",
+        "value": "2s ease-in-out infinite",
+        "purpose": "Bad and warn banner dots (warn 2.4s)."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media (prefers-reduced-motion: reduce)",
+        "purpose": "Animations off."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "800px",
+        "purpose": "max-width: left sidebar hidden, selection becomes a bottom sheet (narrow.ts)."
+      },
+      {
+        "name": "coarse",
+        "value": "(pointer: coarse)",
+        "purpose": "Larger hit areas for touch."
+      },
+      {
+        "name": "portrait",
+        "value": "(orientation: portrait)",
+        "purpose": "Streetview stacks."
+      }
+    ],
+    "theme": "dark only (color-scheme: dark; no light theme)"
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one strong action: ink fill, dark text.",
+      "html": "<button class=\"ds-btn-primary\">Apply</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; height: 32px; padding: 0 15px; border: 0; border-radius: 10px; background: var(--ink, #f5f1ea); color: var(--on-ink, #141311); font: 650 12.5px/1.5 \"Hanken Grotesk Variable\", ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 0.15s, transform 0.15s; } .ds-btn-primary:hover { background: #fff; } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "The default button: a warm fill that brightens on hover.",
+      "html": "<button class=\"ds-btn-quiet\">Focus</button>",
+      "css": ".ds-btn-quiet { height: 32px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--fill-2, rgb(255 250 240 / 0.085)); color: var(--ink-2, rgb(245 241 234 / 0.74)); font: 550 12.5px/1.5 \"Hanken Grotesk Variable\", ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 0.15s, color 0.15s; } .ds-btn-quiet:hover { background: var(--fill-3, rgb(255 250 240 / 0.14)); color: var(--ink, #f5f1ea); } .ds-btn-quiet:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Save Button (lit)",
+      "kind": "button",
+      "refersTo": "button-save-lit",
+      "description": "Unsaved edits waiting: pink, glowing.",
+      "html": "<button class=\"ds-btn-save\" aria-label=\"Save\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M3 8.5l3 3 7-7\"/></svg></button>",
+      "css": ".ds-btn-save { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: var(--sim, #ff9fa8); color: #2a0d11; cursor: pointer; box-shadow: 0 0 12px rgb(255 159 168 / 0.45), 0 0 2px rgb(255 159 168 / 0.6); transition: background 0.2s, box-shadow 0.2s; } .ds-btn-save:hover { background: #ffbcc2; box-shadow: 0 0 18px rgb(255 159 168 / 0.6), 0 0 3px rgb(255 159 168 / 0.8); } .ds-btn-save:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "A tag to select lights by; ink when on.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\">East</button><button class=\"ds-chip ds-on\">Row 1</button></div>",
+      "css": ".ds-chips { display: flex; gap: 6px; } .ds-chip { height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--fill, rgb(255 250 240 / 0.045)); box-shadow: inset 0 0 0 1px var(--line, rgb(255 250 240 / 0.07)); color: var(--ink-2, rgb(245 241 234 / 0.74)); font: 500 12.5px/1.5 \"Hanken Grotesk Variable\", ui-sans-serif, sans-serif; cursor: pointer; transition: background 0.15s; } .ds-chip:hover { background: var(--fill-2, rgb(255 250 240 / 0.085)); } .ds-chip.ds-on { background: var(--ink, #f5f1ea); box-shadow: none; color: var(--on-ink, #141311); } .ds-chip:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segmented",
+      "description": "A recessed track with a raised thumb on the chosen option.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\"><span class=\"ds-seg-thumb\"></span><button role=\"radio\" aria-checked=\"true\">White</button><button role=\"radio\" aria-checked=\"false\">Hue</button></div>",
+      "css": ".ds-seg { position: relative; display: inline-grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 3px; border-radius: 12px; background: var(--well, rgb(0 0 0 / 0.26)); box-shadow: inset 0 0 0 1px var(--line, rgb(255 250 240 / 0.07)); } .ds-seg button { position: relative; z-index: 1; height: 28px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--mute, rgb(245 241 234 / 0.52)); font: 550 12.5px \"Hanken Grotesk Variable\", ui-sans-serif, sans-serif; cursor: pointer; transition: color 0.2s; } .ds-seg button:hover, .ds-seg button[aria-checked=\"true\"] { color: var(--ink, #f5f1ea); } .ds-seg button:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; } .ds-seg-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 2); border-radius: 9px; background: var(--fill-3, rgb(255 250 240 / 0.14)); box-shadow: 0 1px 3px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.06); transition: transform 0.24s cubic-bezier(0.3, 0.7, 0.2, 1); }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A text field in a recessed well.",
+      "html": "<input class=\"ds-input\" placeholder=\"Name\">",
+      "css": ".ds-input { border: 1px solid var(--line-2, rgb(255 250 240 / 0.13)); border-radius: 10px; padding: 7px 12px; background: var(--well, rgb(0 0 0 / 0.26)); color: var(--ink, #f5f1ea); font: 13.5px/1.5 \"Hanken Grotesk Variable\", ui-sans-serif, sans-serif; } .ds-input::placeholder { color: var(--faint, rgb(245 241 234 / 0.3)); } .ds-input:focus { outline: none; border-color: var(--mute, rgb(245 241 234 / 0.52)); }"
+    },
+    {
+      "name": "Switch",
+      "kind": "custom",
+      "refersTo": "switch",
+      "description": "On or off for a shader; ink when on.",
+      "html": "<button class=\"ds-switch ds-on\" role=\"switch\" aria-checked=\"true\" aria-label=\"On\"><span class=\"ds-knob\"></span></button>",
+      "css": ".ds-switch { position: relative; width: 36px; height: 22px; border: 0; border-radius: 999px; background: var(--fill-3, rgb(255 250 240 / 0.14)); cursor: pointer; transition: background 0.18s; } .ds-switch:hover { background: rgb(255 250 242 / 0.2); } .ds-switch.ds-on { background: var(--ink, #f5f1ea); } .ds-switch.ds-on:hover { background: #fff; } .ds-knob { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink, #f5f1ea); box-shadow: 0 1px 3px rgb(0 0 0 / 0.4); transition: transform 0.2s cubic-bezier(0.22, 0.8, 0.24, 1), background 0.18s; } .ds-on .ds-knob { background: var(--on-ink, #141311); transform: translateX(14px); } .ds-switch:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Glass Toolbar",
+      "kind": "nav",
+      "refersTo": "sidebar",
+      "description": "Floating chrome over the map: frosted glass with a rim and a float shadow.",
+      "html": "<div class=\"ds-glass\"><button aria-label=\"Zoom in\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M8 3v10M3 8h10\"/></svg></button><button aria-label=\"Zoom out\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M3 8h10\"/></svg></button></div>",
+      "css": ".ds-glass { display: inline-grid; padding: 3px; border-radius: 12px; background: var(--glass, rgb(24 23 21 / 0.6)); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); box-shadow: inset 0 0 0 1px var(--edge, rgb(255 250 240 / 0.09)), inset 0 1px 0 rgb(255 255 255 / 0.03), 0 18px 48px rgb(0 0 0 / 0.42); } .ds-glass button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: none; color: var(--mute, rgb(245 241 234 / 0.52)); cursor: pointer; transition: background 0.15s, color 0.15s; } .ds-glass button:hover { background: var(--fill-2, rgb(255 250 240 / 0.085)); color: var(--ink, #f5f1ea); } .ds-glass button:focus-visible { outline: 2px solid rgb(255 250 242 / 0.7); outline-offset: 2px; }"
+    },
+    {
+      "name": "Banner",
+      "kind": "custom",
+      "refersTo": "banner-warn",
+      "description": "A degraded state, across the top of the whole site.",
+      "html": "<p class=\"ds-banner\"><span class=\"ds-dot\"></span><strong>Dry run</strong> arclamp is running without a radio, so the real lights won't change.</p>",
+      "css": ".ds-banner { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 38px; margin: 0; padding: 8px 16px; background: rgb(60 47 22 / 0.8); box-shadow: inset 0 -1px 0 rgb(245 192 102 / 0.28); color: var(--ink-2, rgb(245 241 234 / 0.74)); font: 12.5px/1.4 \"Hanken Grotesk Variable\", ui-sans-serif, sans-serif; } .ds-banner strong { color: var(--warn, #f5c066); font-weight: 650; } .ds-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn, #f5c066); box-shadow: 0 0 8px 1px rgb(245 192 102 / 0.6); animation: ds-breathe 2.4s ease-in-out infinite; } @keyframes ds-breathe { 50% { opacity: 0.45; } }"
+    },
+    {
+      "name": "Menu",
+      "kind": "custom",
+      "refersTo": "menu-panel",
+      "description": "A solid panel of items; destructive items redden on hover.",
+      "html": "<div class=\"ds-menu\"><button class=\"ds-menu-item\">Rename</button><button class=\"ds-menu-item ds-danger\">Delete</button></div>",
+      "css": ".ds-menu { display: grid; min-width: 220px; padding: 6px; border-radius: 14px; background: var(--solid-2, #1f1e1c); box-shadow: inset 0 0 0 1px var(--line-2, rgb(255 250 240 / 0.13)), 0 20px 50px rgb(0 0 0 / 0.55); } .ds-menu-item { padding: 8px 10px; border: 0; border-radius: 9px; background: none; color: var(--ink-2, rgb(245 241 234 / 0.74)); font: 13.5px \"Hanken Grotesk Variable\", ui-sans-serif, sans-serif; text-align: left; cursor: pointer; } .ds-menu-item:hover, .ds-menu-item:focus-visible { background: var(--fill-2, rgb(255 250 240 / 0.085)); color: var(--ink, #f5f1ea); outline: none; } .ds-menu-item.ds-danger:hover, .ds-menu-item.ds-danger:focus-visible { background: rgb(66 26 22 / 0.8); color: var(--bad, #ff7d6b); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A dark room, seen from above",
+    "overview": "vibes draws the room from above, each light a glow in the color it's making, and the map is always the whole window, at every size. Everything else floats over it, as on Google Maps: banners along the top, tag chips and the account under them, floors and zoom bottom right, glass sidebars along the left and right edges. The controls sit on frosted glass so the room's own light glows through them.\n\nThe only color on screen should be the lights. The interface stays in warm neutrals (off-white ink at a few strengths over near-black) and gets out of their way. The few hues the UI does use are signals with one job each: red for something wrong or live, amber for a warning or admin mode, pink for unsaved edits, blue for a layer in focus. Nothing shows while all is well; degraded states are banners across the top.\n\nIt is dark only. `color-scheme: dark` is set on `:root` and there is no light theme. Density is high and the type is small (13.5px body, 12.5px controls), in the manner of a tool used up close rather than a page read from across the room.",
+    "keyCharacteristics": [
+      "The map fills the window; all chrome floats over it and the map keeps clear of it through `--inset-*` properties it reads back.",
+      "Frosted glass (`blur(22px) saturate(1.5)`) over anything floating on the map; solid warm greys for menus and pages off the map.",
+      "Warm off-white ink at four alpha steps; warm-white fills and hairlines at three.",
+      "Hue is reserved for the lights and four single-purpose signals.",
+      "Small, dense type: Hanken Grotesk for words, Space Mono for numbers and captions.",
+      "Corners nest: an inner curve is the outer one minus the padding between them."
+    ],
+    "rules": [
+      {
+        "name": "The Only-the-Lights Rule",
+        "body": "The only color on screen should be the lights. Interface surfaces, text and borders stay in the warm neutrals; a hue appears only when it signals something.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Job Rule",
+        "body": "Each signal hue means one thing: red wrong or live, amber warning or admin, pink unsaved, blue focus. Don't borrow one for decoration or for a different meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The Warm White Rule",
+        "body": "Translucent whites are warm (`255 250 240`), never pure grey, so fills and hairlines sit in the same light as the ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Weights Rule",
+        "body": "Space Mono comes in 400 and 700 only: mono text keeps to those. In-between weights are for Hanken Grotesk.",
+        "section": "typography"
+      },
+      {
+        "name": "The Map Is the Interface Rule",
+        "body": "Nothing pushes the map aside or shrinks it. New controls float over it, and the map is told to keep clear through an inset rather than resized.",
+        "section": "layout"
+      },
+      {
+        "name": "The Glass Over the Map Rule",
+        "body": "Anything floating over the map is glass, so the room's light shows through it. Solid surfaces are for things off the map or on a panel's own ground.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Nested Corners Rule",
+        "body": "An inner radius is the outer radius minus the gap between them, so curves run alongside each other.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep the map the whole window and float new controls over it, telling the map to keep clear through `--inset-*`.",
+      "Do put anything floating over the map on glass: `--glass` or `--glass-strong`, `--blur`, the glass rim and `--float`.",
+      "Do use the warm neutral tokens (`ink` steps, `fill` steps, `line` steps) for everything that isn't a signal.",
+      "Do report degraded states as a banner across the top, and show nothing while all is well.",
+      "Do use `sim` pink for anything about unsaved or simulated changes, and `focus` blue for a layer in focus or being edited.",
+      "Do keep mono text at 400 or 700, and use Space Mono for numbers and uppercase captions.",
+      "Do nest corners: inner radius equals outer radius minus the padding.",
+      "Do ease movement with `--ease-out` (`cubic-bezier(0.22, 0.8, 0.24, 1)`), 0.15s for color and 0.2 to 0.36s for things that move."
+    ],
+    "donts": [
+      "Don't add color to the interface for its own sake: the only color on screen should be the lights.",
+      "Don't give a signal hue a second meaning (no blue links, no pink highlights, no amber decoration).",
+      "Don't use pure grey or pure white translucents for fills and hairlines; they're warm white.",
+      "Don't add a light theme or light surfaces; vibes is dark only.",
+      "Don't resize or push the map to make room for a control.",
+      "Don't use the focus blue as the keyboard focus ring."
+    ]
+  }
+}

@@ -20,7 +20,8 @@
 //
 // In a show, the show's timeline (Timeline.tsx) opens between the two.
 // While it's open, a scene's chip drags onto it, and applies as it's let go
-// of without moving (still at the moment it was pressed, for the cue).
+// of without moving (still at the moment it was pressed, for the cue); its
+// Enter puts it on the timeline, at the playhead.
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { pathOf, type Op } from "../../shared/live.ts";
@@ -29,16 +30,16 @@ import type { CueMode } from "../../shared/show.ts";
 import { drafts } from "../draft.ts";
 import { MoreIcon } from "../icons.tsx";
 import { rOfEvent } from "../rtime.ts";
-import { sendApply, sendScenes, sendTransport, useScene, useScenes, useShowCue, useShowOn, useShowQueued, type Scene } from "../scene.ts";
+import { sendApply, sendScenes, sendTransport, useScene, useScenes, useShowCue, useShowOn, useShowQueued, useTimeline, type Scene } from "../scene.ts";
 import { Menu } from "./Menu.tsx";
 import { Segmented } from "./Segmented.tsx";
-import { ChipGhost, chipDrag, dropChip, Timeline } from "./Timeline.tsx";
+import { ChipGhost, chipDrag, dropChip, putChip, Timeline } from "./Timeline.tsx";
 import { press, Transport } from "./Transport.tsx";
 
 // A chip pressed and moved this far is being dragged, not applied.
 const DRAG_PX = 6;
 
-/** A chip's press, while the timeline's open: dragged, onto it; let go of where it was, applied, at the moment it was pressed (a keyboard's click, at once). */
+/** A chip's press, while the timeline's open: dragged, onto it; let go of where it was, applied, at the moment it was pressed (a keyboard's click, onto it at the playhead). */
 function dragOrApply(scene: string, name: string, apply: (e: { timeStamp: number }) => void) {
   return {
     onPointerDown: (e: ReactPointerEvent) => {
@@ -68,7 +69,7 @@ function dragOrApply(scene: string, name: string, apply: (e: { timeStamp: number
       window.addEventListener("pointercancel", cancel);
     },
     onClick: (c: MouseEvent) => {
-      if (c.detail === 0) apply(c);
+      if (c.detail === 0) putChip(scene);
     },
   };
 }
@@ -94,7 +95,7 @@ export function ScenesDrawer({ onHeight }: { onHeight: (px: number) => void }) {
   const showOn = useShowOn();
   const [timelineOpen, setTimelineOpen] = useState(false);
   const building = showOn && timelineOpen;
-  const dock = useRef<HTMLDivElement>(null);
+  const dock = useRef<HTMLElement>(null);
 
   // As tall as it is, for the map to keep its own along the bottom above it.
   useLayoutEffect(() => {
@@ -111,12 +112,12 @@ export function ScenesDrawer({ onHeight }: { onHeight: (px: number) => void }) {
   }, [onHeight]);
 
   return (
-    <div className="show-dock" ref={dock}>
+    <section className="show-dock" ref={dock} aria-label={showOn ? "Show" : "Scenes"}>
       {showOn && <Transport />}
       {building && <Timeline />}
       <ScenesBar building={building} onTimeline={showOn ? () => setTimelineOpen(!timelineOpen) : null} />
       <ChipGhost />
-    </div>
+    </section>
   );
 }
 
@@ -129,6 +130,8 @@ function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: ((
   const queued = useShowQueued();
   const lit = room ? onScene(scenes, room.shaders, room.pools) : null;
   const [error, setError] = useState<string | null>(null);
+  // A scene just made with no sketch, its menu opened for one to be chosen.
+  const [fresh, setFresh] = useState<string | null>(null);
   const said = (sent: Promise<unknown>) =>
     void sent.then(
       () => setError(null),
@@ -167,6 +170,7 @@ function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: ((
     const ops: Op[] = [[pathOf("scenes", "list", id), { name: nextName(scenes) }]];
     const on = choosable(room).filter((s) => !s.muted);
     if (on.length === 1) ops.push([pathOf("scenes", "list", id, "shaders", on[0]!.key), knobsOf(on[0]!, room.pools)]);
+    else setFresh(id);
     send(ops);
   };
 
@@ -185,17 +189,17 @@ function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: ((
         {scenes.order.map((id, i) => {
           const scene = scenes.list[id];
           return scene && room ? (
-            <SceneChip key={id} id={id} n={i + 1} scene={scene} lit={lit === id} queued={queued?.scene === id} show={showOn} building={building} room={room} apply={apply} send={send} />
+            <SceneChip key={id} id={id} n={i + 1} scene={scene} lit={lit === id} queued={queued?.scene === id} show={showOn} building={building} fresh={fresh === id} opened={() => setFresh(null)} room={room} apply={apply} send={send} />
           ) : null;
         })}
-        {scenes.order.length === 0 && <span className="scenes-empty">No scenes yet: + Scene keeps the room as one.</span>}
+        {scenes.order.length === 0 && <span className="scenes-empty">No scenes yet</span>}
       </div>
       {error && (
         <span className="dock-error" role="alert">
           {error}
         </span>
       )}
-      <button className="scene-add" onClick={create} disabled={!room} aria-label="New scene: the room as it is, if one sketch is on">
+      <button className="scene-add" onClick={create} disabled={!room} aria-label="+ Scene: a new scene, the room as it is" title="A new scene: the room as it is, if one sketch is on">
         + Scene
       </button>
       {onTimeline && (
@@ -218,13 +222,20 @@ interface ChipProps {
   show: boolean;
   /** The timeline's open: it drags onto it. */
   building: boolean;
+  /** Just made, with no sketch: its menu opens, to choose one. */
+  fresh: boolean;
+  /** Its menu's been opened for that: it's no longer just made. */
+  opened: () => void;
   room: Scene;
   apply: (id: string, e: { timeStamp: number }) => void;
   send: (ops: Op[]) => void;
 }
 
-function SceneChip({ id, n, scene, lit, queued, show, building, room, apply, send }: ChipProps) {
+function SceneChip({ id, n, scene, lit, queued, show, building, fresh, opened, room, apply, send }: ChipProps) {
   const [deleting, setDeleting] = useState(false);
+  const [align, setAlign] = useState<"start" | "end">("start");
+  const chip = useRef<HTMLSpanElement>(null);
+  const blocks = Object.values(useTimeline().blocks).filter((b) => b.scene === id).length;
   const keys = Object.keys(scene.shaders);
   const sketch = room.shaders.find((s) => keys.includes(s.key));
   const path = (...more: string[]) => pathOf("scenes", "list", id, ...more);
@@ -234,16 +245,52 @@ function SceneChip({ id, n, scene, lit, queued, show, building, room, apply, sen
     if (e.key === "Enter" && name && name !== scene.name) send([[path("name"), name]]);
   };
 
+  // Its menu opens over it, from the scenes' row (so the chips scrolling
+  // don't cut it off: styles.css), lined up with its end in the dock's right
+  // half, to stay on the screen and off the sidebar.
+  const aim = () => {
+    const el = chip.current;
+    const bar = el?.closest(".scenes-bar");
+    if (!el || !bar) return;
+    const r = el.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    el.style.setProperty("--chip-left", `${r.left - b.left}px`);
+    el.style.setProperty("--chip-right", `${b.right - r.right}px`);
+    el.style.setProperty("--chip-below", `${b.bottom - r.top}px`);
+    setAlign(r.left + r.width / 2 > b.left + b.width / 2 ? "end" : "start");
+  };
+
+  // Just made with no sketch: its menu opened, to choose one.
+  useEffect(() => {
+    const button = fresh ? chip.current?.querySelector<HTMLButtonElement>(".menu > button") : null;
+    if (!button) return;
+    button.focus();
+    button.click();
+    opened();
+  }, [fresh]);
+
+  // Taken away: focus on to the next chip, or + Scene, rather than lost with it.
+  const remove = () => {
+    send([[path()]]);
+    const next = chip.current?.nextElementSibling?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    (next ?? chip.current?.closest(".scenes-bar")?.querySelector<HTMLButtonElement>(".scene-add"))?.focus();
+  };
+
   const what = sketch ? sketch.name : keys.length > 0 ? "a sketch that's left the room" : "no sketch yet";
   const applying = building ? dragOrApply(id, scene.name, (e) => apply(id, e)) : show ? press((e) => apply(id, e)) : { onClick: (e: { timeStamp: number }) => apply(id, e) };
   const label = !sketch ? `${n} ${scene.name}: it has ${what}` : show && n <= 9 ? `${n} ${scene.name}: apply it (${n}), ${what}` : `${n} ${scene.name}: apply it, ${what}`;
   return (
-    <span className={`scene-chip${lit ? " lit" : ""}${queued ? " queued" : ""}${building ? " draggable" : ""}`}>
-      <button className="scene-apply" {...applying} disabled={!sketch && !building} aria-label={building ? `${label}; drag it onto the timeline` : label}>
-        <small className="mono">{n}</small>
-        {scene.name}
+    <span
+      className={`scene-chip${lit ? " lit" : ""}${queued ? " queued" : ""}${building ? " draggable" : ""}`}
+      ref={chip}
+      title={sketch ? undefined : `It has ${what}: choose one in its menu`}
+      onPointerDownCapture={aim}
+      onFocusCapture={aim}
+    >
+      <button className="scene-apply" {...applying} disabled={!sketch && !building} aria-label={building ? `${label}; drag it onto the timeline, or Enter to put it at the playhead` : label}>
+        <small className="mono">{n}</small> <span className="scene-label">{scene.name}</span>
       </button>
-      <Menu align="start" side="above" className="transport-button" name={`${scene.name}: its name, its sketch`} label={<MoreIcon />}>
+      <Menu align={align} side="above" className="transport-button" name={`${scene.name}: its name, its sketch`} label={<MoreIcon />}>
         <p className="menu-heading">{scene.name}</p>
         <label className="menu-field">
           <span>Name</span>
@@ -267,8 +314,8 @@ function SceneChip({ id, n, scene, lit, queued, show, building, room, apply, sen
           </button>
         )}
         {deleting ? (
-          <button className="menu-item bad" onClick={() => send([[path()]])}>
-            Delete {scene.name}: sure?
+          <button className="menu-item bad" onClick={remove}>
+            Delete scene?{blocks > 0 && ` ${blocks === 1 ? "Its timeline block" : `Its ${blocks} timeline blocks`} will play nothing.`}
           </button>
         ) : (
           <button className="menu-item" onClick={() => setDeleting(true)}>

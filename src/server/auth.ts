@@ -265,7 +265,7 @@ export function authRoutes(config: Config) {
   auth.post("/dev-login", async (c) => {
     if (!config.devLogin) return c.json({ error: "dev login is off", code: "not_found" }, 404);
     const body = z.object({ name: z.string().trim().min(1).max(60) }).safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: "name required", code: "bad_body" }, 400);
+    if (!body.success) return c.json({ error: "a name is 1 to 60 characters", code: "bad_body" }, 400);
     const name = body.data.name;
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "anon";
     const user: Me = { id: `dev:${slug}`, name, dev: true };
