@@ -3140,29 +3140,71 @@ input.tempo-bpm {
 
 /* The scenes (ScenesDrawer.tsx): a pill each, its number and name, lit while
    the room looks like it, and its menu; wrapping onto another row past what
-   fits (a scrolling row would cut their menus off). Under the show's row,
-   when there is one, with a line between. */
+   fits, and scrolling past two, so the dock (and the map's corner above it,
+   on --dock-h) stays put however many there are. Under the show's row, when
+   there is one, with a line between. */
 .show-dock > .dock-bar + .dock-bar {
   border-top: 1px solid var(--edge);
 }
 
 /* The chips take what's left of the row; with too little for them, a row of their own. */
 .scenes-bar {
+  position: relative;
   flex-wrap: wrap;
   align-items: flex-start;
 }
 
+/* Two rows and half of a third, showing there are more to scroll to; and
+   room round them for a chip's focus ring. */
 .scenes {
   display: flex;
   flex: 1 1 180px;
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+  max-height: calc(2.5 * var(--dock-pill) + 2 * 6px + 4px);
+  margin: -2px;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+/* Narrow: one row of chips, scrolled sideways, beside the cue if it fits. */
+@media (max-width: 800px) {
+  .scenes {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .scene-chip {
+    flex: none;
+  }
+}
+
+/* A chip's menu goes from the scenes' row, outside the scrolling chips, set
+   over the chip it's for (--chip-*: ScenesDrawer.tsx). */
+.scene-chip .menu {
+  position: static;
+}
+
+.scene-chip .menu.above .menu-panel {
+  bottom: calc(var(--chip-below, 100%) + 8px);
+}
+
+.scene-chip .menu.start .menu-panel {
+  left: var(--chip-left, 0);
+}
+
+.scene-chip .menu.end .menu-panel {
+  right: var(--chip-right, 0);
+}
+
+/* A long name gives way, its number kept. */
 .scene-chip {
   display: flex;
   align-items: center;
+  min-width: 0;
+  max-width: min(100%, 240px);
   height: var(--dock-pill);
   padding: var(--dock-inset);
   border-radius: 999px;
@@ -3195,9 +3237,39 @@ input.tempo-bpm {
   color: var(--ink);
 }
 
+.scene-apply {
+  min-width: 0;
+}
+
 .scene-apply small {
+  flex: none;
   color: var(--mute);
   font-size: 10px;
+}
+
+.scene-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Its heading, the scene's whole name, gives way to the menu's width rather than setting it. */
+.scene-chip .menu-heading {
+  display: block;
+  width: 0;
+  min-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A field's hint, under its name. */
+.menu-field small {
+  display: block;
+  margin-top: 2px;
+  color: var(--mute);
+  font-size: 11.5px;
+  font-weight: 400;
+  white-space: normal;
 }
 
 .scene-apply:hover:not(:disabled),
@@ -3293,6 +3365,13 @@ input.tempo-bpm {
   touch-action: none;
 }
 
+/* On a phone the chips are a row that scrolls sideways under a finger; a drag onto the timeline still starts after its few pixels. */
+@media (max-width: 800px) {
+  .scene-chip.draggable .scene-apply {
+    touch-action: pan-x;
+  }
+}
+
 /* The chip being dragged, under the pointer. */
 .chip-ghost {
   position: fixed;
@@ -3323,10 +3402,16 @@ input.tempo-bpm {
 
 .tl-scroll {
   overflow: auto;
-  max-height: 40vh;
+  max-height: 25dvh;
   border-radius: 10px;
   background: var(--well);
   overscroll-behavior: contain;
+}
+
+@media (max-width: 800px) {
+  .tl-scroll {
+    max-height: 18dvh;
+  }
 }
 
 .tl-canvas {
@@ -3460,11 +3545,34 @@ input.tempo-bpm {
 
 .tl-hint {
   min-width: 0;
-  overflow: hidden;
   color: var(--mute);
   font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* Fingers: the dock's controls bigger to tap, and a block's ends wider to
+   catch (inward, as the block cuts off what's past its edges). */
+@media (pointer: coarse) {
+  .show-dock {
+    --dock-control: 40px;
+  }
+
+  .tl-end {
+    position: relative;
+  }
+
+  .tl-end::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .tl-end.start::after {
+    right: -14px;
+  }
+
+  .tl-end.end::after {
+    left: -14px;
+  }
 }
 
 /* Admin mode's clock readout (ClockSync.tsx), beside the map's delay: how
