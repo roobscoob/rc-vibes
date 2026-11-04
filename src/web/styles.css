@@ -1464,10 +1464,6 @@ kbd {
   font-weight: 700;
 }
 
-.add-sketch-head p {
-  font-size: 12.5px;
-}
-
 /* Along the head's right: swapping to the deleted sketches (or back), then the close. */
 .add-sketch-head-actions {
   display: flex;
@@ -1502,6 +1498,8 @@ kbd {
   margin: 0 -20px;
   padding: 4px 20px 20px;
   overflow-y: auto;
+  /* A card Tab scrolls to keeps its focus ring in view. */
+  scroll-padding-block: 8px;
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
 }
@@ -1606,10 +1604,14 @@ button.quiet.add-sketch-section-action {
   justify-content: center;
   background: none;
   box-shadow: none;
-  outline: 1px dashed var(--line-2);
-  outline-offset: -1px;
   color: var(--ink-2);
   text-align: center;
+}
+
+/* The dash, but not while it's focused: then it's the app's own ring. */
+.add-sketch-new:not(:focus-visible) {
+  outline: 1px dashed var(--line-2);
+  outline-offset: -1px;
 }
 
 .add-sketch-new svg {
@@ -1623,15 +1625,18 @@ button.quiet.add-sketch-section-action {
 .add-sketch-new:hover {
   transform: none;
   box-shadow: none;
-  outline-color: var(--faint);
   color: var(--ink);
+}
+
+.add-sketch-new:hover:not(:focus-visible),
+.add-sketch-new.naming {
+  outline-color: var(--faint);
 }
 
 .add-sketch-new.naming {
   justify-content: space-between;
   gap: 10px;
   padding: 12px;
-  outline-color: var(--faint);
   text-align: left;
 }
 

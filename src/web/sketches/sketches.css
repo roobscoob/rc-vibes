@@ -3,6 +3,8 @@
 
 .sketch-page {
   display: grid;
+  /* As wide as the window, however long the sketch's name in the bar. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
@@ -32,6 +34,24 @@
   margin-left: 0;
 }
 
+/* Bigger to tap, the same to look at, as styles.css's touch rules do: each
+   grows an invisible margin, to 44px tall. */
+@media (pointer: coarse) {
+  .page-brand,
+  .page-bar .user-button,
+  .delete-sketch {
+    position: relative;
+  }
+
+  .page-brand::after,
+  .page-bar .user-button::after,
+  .delete-sketch::after {
+    content: "";
+    position: absolute;
+    inset: min(0px, (100% - 44px) / 2) 0;
+  }
+}
+
 /* Deleting a sketch, from its bar, asked once more first. */
 .delete-sketch,
 .confirm-delete .quiet {
@@ -51,17 +71,22 @@
   min-width: 0;
   color: var(--ink-2);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 button.quiet.danger {
   color: var(--warn);
 }
 
+/* Taking what the bar has left, so a long name ellipsizes rather than
+   pushing Delete and the account off the end. */
 .crumbs {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
   color: var(--mute);
   font-size: 13px;
   white-space: nowrap;
@@ -81,6 +106,7 @@ button.quiet.danger {
 }
 
 .crumb-name {
+  min-width: 0;
   overflow: hidden;
   color: var(--ink);
   font-size: 15px;
@@ -97,6 +123,17 @@ button.quiet.danger {
   color: var(--ink-2);
   font-family: var(--mono-font);
   font-size: 12px;
+}
+
+/* What's under the bar: its notice, or the sketch's VS Code. Focused, from
+   script only, once a sketch is restored. */
+.sketch-main {
+  display: grid;
+  min-height: 0;
+}
+
+.sketch-main:focus {
+  outline: none;
 }
 
 /* A sketch: its VS Code, under the bar, and covered while it's woken again. */
@@ -131,6 +168,7 @@ button.quiet.danger {
 
 .box-notice p {
   max-width: 520px;
+  overflow-wrap: anywhere;
 }
 
 .box-notice button {
@@ -141,8 +179,9 @@ button.quiet.danger {
   animation: breathe 1.6s ease-in-out infinite alternate;
 }
 
+/* Breathing, but never too faint to read (4.5:1 on --void, at its faintest). */
 @keyframes breathe {
   from {
-    opacity: 0.45;
+    opacity: 0.7;
   }
 }

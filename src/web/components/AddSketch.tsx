@@ -9,7 +9,8 @@
 // that name. Deleted sketches are another view of the dialog, swapped in
 // (and back) by the button beside its close: each to restore.
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { DEFAULT_SKETCHES, defaultSketch } from "../../shared/default-sketches.ts";
 import type { Sketch } from "../../shared/vibes.ts";
 import { useCreateSketch, useDeletedSketches, useDeleteSketch, useForkSketch, useRenameSketch, useRestoreSketch, useSketches } from "../api.ts";
@@ -27,6 +28,7 @@ interface Props {
 export function AddSketch({ open, onPick, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const newButton = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState("");
   // The name of a new one, while it's being named.
   const [naming, setNaming] = useState<string | null>(null);
@@ -62,9 +64,19 @@ export function AddSketch({ open, onPick, onClose }: Props) {
   const list = matching.filter((s) => !s.builtIn).sort((a, b) => b.updatedAt - a.updatedAt);
   const gone = (deleted.data ?? []).filter((s) => s.name.toLowerCase().includes(wanted));
   const anyGone = (deleted.data?.length ?? 0) > 0;
+  // Back to searching, once what had focus is gone (a sketch deleted or
+  // restored, the view swapped), so it isn't lost. With a mouse only, as it
+  // opens: on a touch screen it would bring up the on-screen keyboard.
+  const toSearch = () => matchMedia("(pointer: fine)").matches && search.current?.focus();
   const swap = (to: "library" | "deleted") => {
     setView(to);
     setNaming(null);
+    toSearch();
+  };
+  // Not naming a new one after all: back to the card that started it.
+  const stopNaming = () => {
+    flushSync(() => setNaming(null));
+    newButton.current?.focus();
   };
   const make = (name: string) => create.mutate(name, { onSuccess: (s) => navigate(`/sketches/${s.id}`) });
   const submit = (e: FormEvent) => {
@@ -85,10 +97,7 @@ export function AddSketch({ open, onPick, onClose }: Props) {
     >
       <div className="add-sketch-card">
         <header className="add-sketch-head">
-          <div>
-            <h2>{view === "deleted" ? "Recently Deleted" : "Sketches Library"}</h2>
-            <p className="muted"></p>
-          </div>
+          <h2>{view === "deleted" ? "Recently Deleted" : "Sketches Library"}</h2>
           <div className="add-sketch-head-actions">
             {/* The other view: the deleted ones (while there are any), or back to every sketch. */}
             {view === "deleted" ? (
@@ -112,6 +121,7 @@ export function AddSketch({ open, onPick, onClose }: Props) {
           className="add-sketch-search"
           type="search"
           placeholder={view === "deleted" ? "Search deleted sketches" : "Search sketches"}
+          aria-label={view === "deleted" ? "Search deleted sketches" : "Search sketches"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -119,7 +129,7 @@ export function AddSketch({ open, onPick, onClose }: Props) {
         <div className="add-sketch-scroll">
           {view === "deleted" ? (
             gone.length > 0 ? (
-              <Deleted sketches={gone} />
+              <Deleted sketches={gone} onRestored={toSearch} />
             ) : (
               <p className="add-sketch-quiet muted">{wanted ? `No deleted sketch called “${query.trim()}”.` : "Nothing's been deleted."}</p>
             )
@@ -148,7 +158,7 @@ export function AddSketch({ open, onPick, onClose }: Props) {
                   <ul className="add-sketch-grid">
                     {defaults.map((s) => (
                       <li key={s.id}>
-                        <Card sketch={s} onAdd={() => onPick({ id: s.id, name: s.name })} />
+                        <Card sketch={s} onAdd={() => onPick({ id: s.id, name: s.name })} onDeleted={toSearch} />
                       </li>
                     ))}
                   </ul>
@@ -167,22 +177,30 @@ export function AddSketch({ open, onPick, onClose }: Props) {
                 <ul className="add-sketch-grid">
                   {list.map((s) => (
                     <li key={s.id}>
-                      <Card sketch={s} onAdd={() => onPick({ id: s.id, name: s.name })} />
+                      <Card sketch={s} onAdd={() => onPick({ id: s.id, name: s.name })} onDeleted={toSearch} />
                     </li>
                   ))}
                   {/* A new one, last: a skeleton of a card, named here. */}
                   <li>
                     {naming === null ? (
-                      <button className="add-sketch-item add-sketch-new" onClick={() => setNaming(query.trim())}>
+                      <button ref={newButton} className="add-sketch-item add-sketch-new" onClick={() => setNaming(query.trim())}>
                         <PlusIcon />
                         <span className="add-sketch-name">New sketch</span>
                         <span className="add-sketch-meta">A slow wave to start from</span>
                       </button>
                     ) : (
                       <form className="add-sketch-item add-sketch-new naming" onSubmit={submit}>
-                        <input autoFocus placeholder="Its name" value={naming} maxLength={80} onChange={(e) => setNaming(e.target.value)} />
+                        <input
+                          autoFocus
+                          placeholder="Its name"
+                          aria-label="New sketch's name"
+                          value={naming}
+                          maxLength={80}
+                          onChange={(e) => setNaming(e.target.value)}
+                          onKeyDown={(e) => escaped(e) && stopNaming()}
+                        />
                         <div className="add-sketch-naming-actions">
-                          <button className="quiet" type="button" onClick={() => setNaming(null)}>
+                          <button className="quiet" type="button" onClick={stopNaming}>
                             Cancel
                           </button>
                           <button className="primary" type="submit" disabled={!naming.trim() || create.isPending}>
@@ -201,6 +219,16 @@ export function AddSketch({ open, onPick, onClose }: Props) {
       </div>
     </dialog>
   );
+}
+
+/**
+ * Escape in a name being typed: just stops naming, rather than (as it would
+ * anywhere else in it) closing the whole dialog and losing the name.
+ */
+function escaped(e: KeyboardEvent): boolean {
+  if (e.key !== "Escape") return false;
+  e.preventDefault();
+  return true;
 }
 
 /** A section of the library: a rule across, its title and what's in it, then its cards. */
@@ -224,7 +252,9 @@ function LibrarySection({ title, about, action, children }: { title: string; abo
  * menu (CardMenu.tsx) to rename it (in place), fork it (named in place, then
  * opened), or delete it (asked once more).
  */
-function Card({ sketch, onAdd }: { sketch: Sketch; onAdd: () => void }) {
+function Card({ sketch, onAdd, onDeleted }: { sketch: Sketch; onAdd: () => void; onDeleted: () => void }) {
+  // Where focus goes back to, once it's renamed (or not) or not deleted after all.
+  const add = useRef<HTMLButtonElement>(null);
   const rename = useRenameSketch();
   const fork = useForkSketch();
   const remove = useDeleteSketch();
@@ -233,14 +263,18 @@ function Card({ sketch, onAdd }: { sketch: Sketch; onAdd: () => void }) {
   const [deleting, setDeleting] = useState(false);
   const error = rename.error ?? fork.error ?? remove.error;
   const busy = rename.isPending || fork.isPending;
+  const stopNaming = () => {
+    setNaming(null);
+    add.current?.focus();
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const name = naming?.name.trim();
     if (!naming || !name) return;
     if (naming.what === "fork") fork.mutate({ id: sketch.id, name }, { onSuccess: (s) => navigate(`/sketches/${s.id}`) });
-    else if (name === sketch.name) setNaming(null);
-    else rename.mutate({ id: sketch.id, name }, { onSuccess: () => setNaming(null) });
+    else if (name === sketch.name) stopNaming();
+    else rename.mutate({ id: sketch.id, name }, { onSuccess: stopNaming });
   };
 
   return (
@@ -253,10 +287,10 @@ function Card({ sketch, onAdd }: { sketch: Sketch; onAdd: () => void }) {
             maxLength={80}
             aria-label={naming.what === "fork" ? "The fork's name" : "New name"}
             onChange={(e) => setNaming({ ...naming, name: e.target.value })}
-            onKeyDown={(e) => e.key === "Escape" && setNaming(null)}
+            onKeyDown={(e) => escaped(e) && stopNaming()}
           />
           <div className="add-sketch-naming-actions">
-            <button className="quiet" type="button" onClick={() => setNaming(null)}>
+            <button className="quiet" type="button" onClick={stopNaming}>
               Cancel
             </button>
             <button className="primary" type="submit" disabled={!naming.name.trim() || busy}>
@@ -283,22 +317,31 @@ function Card({ sketch, onAdd }: { sketch: Sketch; onAdd: () => void }) {
       {deleting ? (
         <div className="sketch-card-confirm">
           <span>Delete for everyone? Anyone can restore it.</span>
-          <button className="quiet danger" disabled={remove.isPending} onClick={() => remove.mutate(sketch.id)}>
+          {/* Awaited rather than mutate's onSuccess, which never runs: this card is gone by then. Its error shows below. */}
+          <button className="quiet danger" disabled={remove.isPending} onClick={() => remove.mutateAsync(sketch.id).then(onDeleted, () => {})}>
             Delete it
           </button>
-          <button className="quiet" onClick={() => setDeleting(false)}>
+          {/* Focus starts on the way back out, as the menu it came from is gone. */}
+          <button
+            className="quiet"
+            autoFocus
+            onClick={() => {
+              flushSync(() => setDeleting(false));
+              add.current?.focus();
+            }}
+          >
             Cancel
           </button>
         </div>
       ) : (
         <div className="sketch-card-actions">
-          <button className="primary" onClick={onAdd}>
+          <button ref={add} className="primary" onClick={onAdd} aria-label={`Add ${sketch.name}`}>
             Add
           </button>
           {/* vibes' own has no code to view, rename, fork or delete. */}
           {!sketch.builtIn && (
             <>
-              <button className="quiet" onClick={() => navigate(`/sketches/${sketch.id}`)}>
+              <button className="quiet" onClick={() => navigate(`/sketches/${sketch.id}`)} aria-label={`View Code of ${sketch.name}`}>
                 View Code
               </button>
               <CardMenu
@@ -319,7 +362,7 @@ function Card({ sketch, onAdd }: { sketch: Sketch; onAdd: () => void }) {
 }
 
 /** The deleted sketches, the dialog's other view: anyone can restore them, for everyone. */
-function Deleted({ sketches }: { sketches: Sketch[] }) {
+function Deleted({ sketches, onRestored }: { sketches: Sketch[]; onRestored: () => void }) {
   const restore = useRestoreSketch();
   return (
     <section className="add-sketch-deleted">
@@ -332,7 +375,7 @@ function Deleted({ sketches }: { sketches: Sketch[] }) {
                 deleted {ago(s.deleted!.at)} by {s.deleted!.by}
               </span>
             </span>
-            <button className="quiet" disabled={restore.isPending} onClick={() => restore.mutate(s.id)}>
+            <button className="quiet" disabled={restore.isPending} onClick={() => restore.mutate(s.id, { onSuccess: onRestored })} aria-label={`Restore ${s.name}`}>
               Restore
             </button>
           </li>
