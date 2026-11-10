@@ -1,7 +1,8 @@
 // Scenes applied in a show (shared/scenes.ts), on the show's clock: every
 // change one makes goes in with the same frame, the one the show's cue mode
-// puts it in (shared/show.ts: cueAt), through arclamp's schedule. Mutes
-// (shaders.ts: setMutedAt) and knobs (a statement run before the shader
+// puts it in (shared/show.ts: cueAt), through arclamp's schedule. Shaders
+// on and off (shaders.ts: setOnAt: a sketch by its mask, any other by its
+// mute) and knobs (a statement run before the shader
 // renders that frame: timeline.ts' applyCode) both, so the room changes all
 // at once, on the beat. vibes' own record of the knobs (the pools) changes
 // when the frame comes; the scene waiting for it is in the tree
@@ -18,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import type { LiveTree } from "../shared/live.ts";
 import { sameValue, type ChangeEvent, type Changes, type ParamValue } from "../shared/params.ts";
-import { isBase, type SceneKnobs } from "../shared/scenes.ts";
+import { isBase, shaderOn, type SceneKnobs } from "../shared/scenes.ts";
 import { cueAt } from "../shared/show.ts";
 import type { Me, Shader } from "../shared/vibes.ts";
 import type { Arclamp } from "./arclamp.ts";
@@ -47,7 +48,8 @@ interface KnobChange {
 interface Queued {
   scene: string;
   frame: number;
-  mutes: Map<string, { id: string; before: boolean }>;
+  /** Each shader switched on or off, by its schedule id. */
+  switches: Map<string, { id: string }>;
   knobs: Map<string, KnobChange>;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -57,7 +59,7 @@ interface Deps {
   scenes: Pick<ScenesSource, "get">;
   /** The room as the live tree has it. */
   room: () => Pick<LiveTree, "shaders" | "stack" | "pools">;
-  shaders: Pick<Shaders, "setMutedAt" | "idOf">;
+  shaders: Pick<Shaders, "setOnAt" | "idOf">;
   arclamp: Pick<Arclamp, "evalAt">;
   pools: Pick<Pools, "set">;
   db: Pick<Db, "log">;
@@ -126,17 +128,17 @@ export function createShowApply({ show, scenes, room, shaders, arclamp, pools, d
       const tag = randomUUID().slice(0, 8);
 
       // Each shader as the scene would have it: on (its sketch), or off.
-      const mutes: Queued["mutes"] = new Map();
+      const switches: Queued["switches"] = new Map();
       const knobs: Queued["knobs"] = new Map();
       const sends: Promise<unknown>[] = [];
       for (const s of here) {
-        const was = theirs?.mutes.get(s.key);
-        const muted = !Object.hasOwn(scene.shaders, s.key);
+        const was = theirs?.switches.get(s.key);
+        const on = Object.hasOwn(scene.shaders, s.key);
         // Said whole wherever the scene before it would have changed it; elsewhere, only if it's different.
-        if (muted === s.muted && !was) continue;
+        if (on === shaderOn(s) && !was) continue;
         const scheduleId = `m:${tag}:${s.key}`;
-        mutes.set(s.key, { id: scheduleId, before: was ? was.before : s.muted });
-        sends.push(shaders.setMutedAt(s.key, muted, { at: frame, id: scheduleId, emplace: was?.id }, user));
+        switches.set(s.key, { id: scheduleId });
+        sends.push(shaders.setOnAt(s.key, on, { at: frame, id: scheduleId, emplace: was?.id }, user));
       }
       // And its sketch's knobs (and any the scene before it would have changed, as they were).
       for (const s of here) {
@@ -169,7 +171,7 @@ export function createShowApply({ show, scenes, room, shaders, arclamp, pools, d
         },
         Math.max(0, frame - rNow()),
       );
-      queued = { scene: id, frame, mutes, knobs, timer };
+      queued = { scene: id, frame, switches, knobs, timer };
       show.queue({ scene: id, frame });
       db.log({ user, action: "scenes.apply", detail: { scene: scene.name, cue: state.cue } });
       return frame;

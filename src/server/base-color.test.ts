@@ -100,6 +100,11 @@ beforeEach(() => {
       calls.push(`mask ${id} ${mask.join(",")}`);
       scene.set(id, { ...scene.get(id)!, mask });
     },
+    setMaskAt: async (id: number, mask: number[], schedule: { at: number }) => {
+      calls.push(`mask ${id} ${mask.join(",")} at ${schedule.at}`);
+      scene.set(id, { ...scene.get(id)!, mask });
+      return null;
+    },
     setMuted: async (id: number, muted: boolean) => {
       calls.push(`muted ${id} ${muted}`);
       scene.set(id, { ...scene.get(id)!, muted });

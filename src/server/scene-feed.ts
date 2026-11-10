@@ -32,7 +32,7 @@
 import { createHash } from "node:crypto";
 import { decodeTouched, lightsOf, type LightsResponse, type RoomTemplate, type ShaderDescriptor } from "../shared/arclamp.ts";
 import type { SceneFeed, Shader, ShaderSketch } from "../shared/vibes.ts";
-import { ArclampError, type Arclamp } from "./arclamp.ts";
+import { ArclampError, type Arclamp, type Schedule } from "./arclamp.ts";
 import type { Db, InstanceRow } from "./db.ts";
 import type { Config } from "./env.ts";
 import type { EventHandlers, Following } from "./event-stream.ts";
@@ -433,6 +433,23 @@ export function createSceneFeed({ config, db, arclamp, follow, layout, instances
       }
       return value;
     };
+    /** A change put off for a frame (or, its time passed, gone in at once: null), shown as that frame comes, in place of any it emplaced. */
+    const shownAt = (id: number, change: Partial<Kept>, schedule: Schedule, frame: number | null) => {
+      if (schedule.emplace) {
+        clearTimeout(putOff.get(schedule.emplace));
+        putOff.delete(schedule.emplace);
+      }
+      if (frame === null) return then(() => patch(id, change), frame);
+      const show = setTimeout(
+        () => {
+          if (schedule.id) putOff.delete(schedule.id);
+          then(() => patch(id, change), undefined);
+        },
+        Math.max(0, frame - rNow()),
+      );
+      if (schedule.id) putOff.set(schedule.id, show);
+      return frame;
+    };
     return {
       ...a,
       // Put in at a position, the rest above it move up.
@@ -452,25 +469,9 @@ export function createSceneFeed({ config, db, arclamp, follow, layout, instances
         return then(() => answered(d), d);
       },
       setMuted: async (id, muted) => then(() => patch(id, { muted }), await a.setMuted(id, muted)),
-      setMutedAt: async (id, muted, schedule) => {
-        const frame = await a.setMutedAt(id, muted, schedule);
-        if (schedule.emplace) {
-          clearTimeout(putOff.get(schedule.emplace));
-          putOff.delete(schedule.emplace);
-        }
-        // Its time had passed: it went in at once.
-        if (frame === null) return then(() => patch(id, { muted }), frame);
-        const show = setTimeout(
-          () => {
-            if (schedule.id) putOff.delete(schedule.id);
-            then(() => patch(id, { muted }), undefined);
-          },
-          Math.max(0, frame - rNow()),
-        );
-        if (schedule.id) putOff.set(schedule.id, show);
-        return frame;
-      },
+      setMutedAt: async (id, muted, schedule) => shownAt(id, { muted }, schedule, await a.setMutedAt(id, muted, schedule)),
       setMask: async (id, mask) => then(() => patch(id, { mask: sorted(new Set(mask)) }), await a.setMask(id, mask)),
+      setMaskAt: async (id, mask, schedule) => shownAt(id, { mask: sorted(new Set(mask)) }, schedule, await a.setMaskAt(id, mask, schedule)),
       moveShader: async (id, position) => then(() => move(id, position), await a.moveShader(id, position)),
       deleteShader: async (id) => {
         const out = () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BASE_COLOR } from "./base-color.ts";
 import type { Pool } from "./live.ts";
 import type { ParamSpec } from "./params.ts";
-import { applyingOf, knobsOf, onScene, type Scene, type Scenes } from "./scenes.ts";
+import { applyingOf, knobsOf, onScene, shaderOn, type Scene, type Scenes } from "./scenes.ts";
 import type { Shader } from "./vibes.ts";
 
 const speed: ParamSpec = { kind: "number", name: "speed", label: "Speed", lights: {}, default: 1, min: 0, max: 10, step: 0.1 };
@@ -63,6 +63,18 @@ describe("applying a scene", () => {
     expect(onScene(scenes, room, pools)).toBe("two");
     expect(onScene(scenes, room, { pa: pool({ speed: { "1": 6 } }) })).toBeNull();
     expect(onScene(scenes, [...room.slice(0, 1), shader("b")], pools)).toBeNull();
+  });
+
+  it("has a sketch from vibes on and off by its mask, and any other by its mute", () => {
+    const instance = { id: "i", home: [1, 2] } as Shader["instance"];
+    expect(shaderOn(shader("i", { instance, mask: [3] }))).toBe(true);
+    expect(shaderOn(shader("i", { instance, mask: [1, 2, 3] }))).toBe(false);
+    // Muted from before (or outside vibes): off, whatever its mask.
+    expect(shaderOn(shader("i", { instance, mask: [], muted: true }))).toBe(false);
+    expect(shaderOn(shader("x", { mask: [1, 2, 3] }))).toBe(true);
+    expect(shaderOn(shader("x", { muted: true }))).toBe(false);
+    const room = [shader("i", { instance, mask: [1, 2, 3] }), shader("j", { instance, mask: [] })];
+    expect(applyingOf(scene({ i: {} }), room, {})).toEqual({ on: ["i"], off: ["j"], knobs: [] });
   });
 
   it("takes a sketch's knobs from the room as they are, to keep apart from them", () => {

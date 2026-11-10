@@ -3,8 +3,10 @@
 // only knows by arclamp's id; and, from whoever's adding it, the key of their
 // pending edit that put it in ("+…"). The browser only ever has keys, and
 // changes shaders by them here (by route, or in an update: updates.ts); which
-// shader in arclamp a key is, only the server knows. Any shader can be muted,
-// masked, moved or taken out, however it was put in. One not in the room yet
+// shader in arclamp a key is, only the server knows. Any shader can be
+// moved or taken out, however it was put in. On and off, though, goes two
+// ways (shared/scenes.ts: shaderOn): an instance by its mask alone (off,
+// masked off its whole home), any other by its mute alone (setOnAt). One not in the room yet
 // (an instance, building) keeps what's wanted of it, and goes in that way
 // (instances.ts). An instance's params are in its pool (pools.ts).
 
@@ -62,7 +64,7 @@ const badBody = (r: { success: boolean }, c: Context) => (r.success ? undefined 
 
 export interface ShaderDeps {
   config: Pick<Config, "signingKey">;
-  arclamp: Pick<Arclamp, "scene" | "shader" | "setMuted" | "setMutedAt" | "setMask" | "moveShader" | "deleteShader">;
+  arclamp: Pick<Arclamp, "scene" | "shader" | "setMuted" | "setMutedAt" | "setMask" | "setMaskAt" | "moveShader" | "deleteShader">;
   db: Db;
   /** Sketches in the room (null with sketches off). */
   instances: Instances | null;
@@ -136,6 +138,32 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
       if (!it) throw new Refused(404, "not_found", "no such shader");
       if (it.arclampId === null) throw new Refused(409, "not_live", "it isn't in the room yet");
       return arclamp.setMutedAt(it.arclampId, muted, schedule);
+    },
+
+    /**
+     * On or off, put off till a frame (Schedule, arclamp.ts), the one way
+     * the shader goes on and off: an instance by its mask (on, its whole
+     * home; off, none of it; and unmuted, if it's muted from before), any
+     * other by its mute. The frame it goes in with, or null if it went in at
+     * once (as setMutedAt). Logged by its caller.
+     */
+    async setOnAt(key: string, on: boolean, schedule: Schedule, user: Person): Promise<number | null> {
+      const it = resolve(key, user);
+      if (!it) throw new Refused(404, "not_found", "no such shader");
+      if (!it.instance) {
+        if (it.arclampId === null) throw new Refused(409, "not_live", "it isn't in the room yet");
+        return arclamp.setMutedAt(it.arclampId, !on, schedule);
+      }
+      // Off, masked off its home too: an instance is always masked off everything outside it (instances.within).
+      const asked = on ? [] : [...it.instance.home].sort((a, b) => a - b);
+      if (await wanted(key, { mask: asked, ...(on ? { muted: false } : {}) }, user)) return null;
+      if (it.arclampId === null) throw new Refused(409, "not_live", "it isn't in the room yet");
+      const whole = instances ? await instances.within(it.arclampId, asked) : asked;
+      const frame = await arclamp.setMaskAt(it.arclampId, whole, schedule);
+      // Muted from before: let go of, in the same frame (its own schedule id, so it isn't emplaced with the mask).
+      const d = on ? await arclamp.shader(it.arclampId) : null;
+      if (d?.muted) await arclamp.setMutedAt(it.arclampId, false, { at: schedule.at, ...(schedule.id ? { id: `${schedule.id}:unmute` } : {}) });
+      return frame;
     },
 
     /** A key's shader in arclamp, by arclamp's id; null if it isn't in the room (or there's no such shader). */

@@ -51,6 +51,20 @@ export type SceneOp =
   | { op: "knob"; id: string; key: ShaderKey; param: string; light: string; value: ParamValue | null }
   | { op: "order"; ids: string[] };
 
+/**
+ * Whether a shader's on. A sketch put in from vibes (an instance) is on and
+ * off by its mask alone: on while it's on any light of its home (off, it's
+ * masked off all of them). One put in some other way is on and off by its
+ * mute alone. (An instance muted from before this, or from outside vibes, is
+ * off.)
+ */
+export function shaderOn(s: Pick<Shader, "muted" | "mask" | "instance">): boolean {
+  if (s.muted) return false;
+  if (!s.instance) return true;
+  const mask = new Set(s.mask);
+  return s.instance.home.some((id) => !mask.has(id));
+}
+
 /** Whether a shader is Base Color, which scenes leave alone. */
 export const isBase = (s: Pick<Shader, "pool" | "instance">) => s.pool === BASE_COLOR.pool || s.instance?.id === BASE_COLOR.instance;
 
@@ -82,10 +96,10 @@ export function applyingOf(scene: Scene, shaders: readonly Shader[], pools: Reco
     if (s.stage === "failed" || isBase(s)) continue;
     const knobs = scene.shaders[s.key];
     if (!knobs) {
-      if (!s.muted) out.off.push(s.key);
+      if (shaderOn(s)) out.off.push(s.key);
       continue;
     }
-    if (s.muted) out.on.push(s.key);
+    if (!shaderOn(s)) out.on.push(s.key);
     const pool = s.pool ? pools[s.pool] : undefined;
     if (!pool) continue;
     for (const spec of pool.declared ?? []) {

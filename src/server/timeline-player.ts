@@ -1,11 +1,11 @@
 // The show's timeline played (shared/show-timeline.ts): while a show's on
 // and its playhead moves, the blocks' scenes go on and off in the room, each
 // edge (a block's start or end) in its frame, through arclamp's schedule, as
-// a scene applied in a show goes in (show-apply.ts): mutes (shaders.ts:
-// setMutedAt) and knobs (a statement run before the shader renders that
+// a scene applied in a show goes in (show-apply.ts): shaders on and off
+// (shaders.ts: setOnAt) and knobs (a statement run before the shader renders that
 // frame: timeline.ts' applyCode), all in one frame. vibes' own record of the
-// knobs (the pools) changes as the frame comes; the mutes, as the feed shows
-// them.
+// knobs (the pools) changes as the frame comes; on and off, as the feed
+// shows it.
 //
 // It works AHEAD_MS ahead: an edge is sent once it's that near, and kept
 // till its frame. Anything that could move one (a block put or taken away, a
@@ -28,7 +28,7 @@
 import { randomUUID } from "node:crypto";
 import type { LiveTree } from "../shared/live.ts";
 import { sameValue, type ChangeEvent, type ParamValue } from "../shared/params.ts";
-import { isBase, type Scene } from "../shared/scenes.ts";
+import { isBase, shaderOn, type Scene } from "../shared/scenes.ts";
 import type { ShowClock } from "../shared/show.ts";
 import { edgesOf, endOf, msAt, onAt, posAt, type Playhead, type Timeline } from "../shared/show-timeline.ts";
 import type { Me, Shader, ShaderKey } from "../shared/vibes.ts";
@@ -53,8 +53,8 @@ type Values = Record<string, ParamValue>;
 /** Knobs said whole: by param, by light (null: back to the default). */
 type Knobs = Record<string, Record<string, ParamValue | null>>;
 
-/** One change in one frame: a shader's mute, or its knobs. */
-type Change = { kind: "m"; key: ShaderKey; muted: boolean } | { kind: "k"; key: ShaderKey; pool: string; knobs: Knobs };
+/** One change in one frame: a shader on or off, or its knobs. */
+type Change = { kind: "m"; key: ShaderKey; on: boolean } | { kind: "k"; key: ShaderKey; pool: string; knobs: Knobs };
 type Planned = Change & { frame: number };
 /** A change sent, waiting for its frame, under its schedule id (null: knobs for a shader arclamp hasn't got, kept just for the pools). */
 type Sent = Planned & { id: string | null };
@@ -76,7 +76,7 @@ interface Deps {
   scenes: Pick<ScenesSource, "tree">;
   /** The room as the live tree has it. */
   room: () => Pick<LiveTree, "shaders" | "stack" | "pools">;
-  shaders: Pick<Shaders, "setMutedAt" | "idOf">;
+  shaders: Pick<Shaders, "setOnAt" | "idOf">;
   arclamp: Pick<Arclamp, "evalAt">;
   pools: Pick<Pools, "set">;
   /** arclamp's time now (rclamp-time.ts). */
@@ -91,7 +91,7 @@ const sameValues = (a: Record<string, ParamValue | null>, b: Record<string, Para
   return ka.length === Object.keys(b).length && ka.every((l) => Object.hasOwn(b, l) && (a[l] === null || b[l] === null ? a[l] === b[l] : sameValue(a[l]!, b[l]!)));
 };
 const sameKnobs = (a: Knobs, b: Knobs) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((p) => Object.hasOwn(b, p) && sameValues(a[p]!, b[p]!));
-const same = (a: Planned, b: Planned) => a.frame === b.frame && a.key === b.key && (a.kind === "m" ? b.kind === "m" && a.muted === b.muted : b.kind === "k" && sameKnobs(a.knobs, b.knobs));
+const same = (a: Planned, b: Planned) => a.frame === b.frame && a.key === b.key && (a.kind === "m" ? b.kind === "m" && a.on === b.on : b.kind === "k" && sameKnobs(a.knobs, b.knobs));
 
 /** A param going from one set of values (or lights) to another, said whole: every light either has, as the second has it. */
 function whole(from: Record<string, unknown>, to: Values): Record<string, ParamValue | null> {
@@ -119,13 +119,13 @@ export function createTimelinePlayer({ show, timeline, scenes, room, shaders, ar
   /** The params a shader's sketch declares now. */
   const declared = (tree: Pick<LiveTree, "pools">, s: Shader) => (s.pool ? (tree.pools[s.pool]?.declared ?? []).map((p) => p.name) : []);
 
-  /** The room as the timeline has it at `pos`, said whole against the room as it is: every shader's mute, and any knob that isn't so. */
+  /** The room as the timeline has it at `pos`, said whole against the room as it is: every shader on or off, and any knob that isn't so. */
   function wholeAt(r: Run, list: Record<string, Scene>, t: Timeline, pos: number): Change[] {
     const tree = room();
     const on = onAt(t, list, pos);
     const out: Change[] = [];
     for (const s of playable(tree)) {
-      out.push({ kind: "m", key: s.key, muted: !on.has(s.key) });
+      out.push({ kind: "m", key: s.key, on: on.has(s.key) });
       const knobs: Knobs = {};
       for (const p of declared(tree, s)) {
         const now = tree.pools[s.pool!]?.values[p] ?? {};
@@ -144,7 +144,7 @@ export function createTimelinePlayer({ show, timeline, scenes, room, shaders, ar
     const is = onAt(t, list, last);
     const out: Change[] = [];
     for (const s of playable(tree)) {
-      if (was.has(s.key) !== is.has(s.key)) out.push({ kind: "m", key: s.key, muted: !is.has(s.key) });
+      if (was.has(s.key) !== is.has(s.key)) out.push({ kind: "m", key: s.key, on: is.has(s.key) });
       const from = was.get(s.key);
       const to = is.get(s.key);
       if (from === to || !s.pool) continue;
@@ -186,7 +186,7 @@ export function createTimelinePlayer({ show, timeline, scenes, room, shaders, ar
     const playing = run && old.frame >= run.whole.frame ? run : null;
     const list = scenes.tree().list;
     const on = playing ? onAt(timeline.tree(), list, posAt(playing.playhead, playing.clock, old.frame)) : null;
-    if (old.kind === "m") return { ...old, muted: on ? !on.has(old.key) : (s?.muted ?? old.muted) };
+    if (old.kind === "m") return { ...old, on: on ? on.has(old.key) : s ? shaderOn(s) : old.on };
     const knobs: Knobs = {};
     for (const [p, byLight] of Object.entries(old.knobs)) {
       const want = playing && s ? valuesOf(playing, list, s, on!.get(old.key), p) : (tree.pools[old.pool]?.values[p] ?? {});
@@ -220,7 +220,7 @@ export function createTimelinePlayer({ show, timeline, scenes, room, shaders, ar
     const id = `tl:${r?.tag ?? "stop"}:${r ? ++r.seq : randomUUID().slice(0, 8)}`;
     const schedule = { at: c.frame, id, emplace: emplace ?? undefined };
     let sentId: string | null = id;
-    if (c.kind === "m") await shaders.setMutedAt(c.key, c.muted, schedule, TIMELINE);
+    if (c.kind === "m") await shaders.setOnAt(c.key, c.on, schedule, TIMELINE);
     else {
       const shaderId = shaders.idOf(c.key, TIMELINE);
       // Not in arclamp yet: its stream gives it every value as it starts, the pool's by then.
