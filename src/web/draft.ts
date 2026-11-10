@@ -37,7 +37,7 @@ import {
   type ParamValue,
   type ShaderParams,
 } from "../shared/params.ts";
-import { applyingOf, isBase, type Scene as SavedScene } from "../shared/scenes.ts";
+import { applyingOf, isBase, shaderOn, type Scene as SavedScene } from "../shared/scenes.ts";
 import type { Instance, ShaderKey, ShaderSketch } from "../shared/vibes.ts";
 import { invalidateScene, sendUpdate, UpdateError, type Scene, type SceneShader } from "./scene.ts";
 
@@ -259,6 +259,21 @@ export function switchEverywhere(layer: Layer, on: boolean, all: readonly number
 
 /** A shader put in some other way, unmuted or muted: the only way it goes on and off. */
 export const muteFor = (on: boolean): ShaderPatch => ({ muted: !on });
+
+/**
+ * A sketch switched off by a pending edit (on in the room, on no light now),
+ * back on the lights the room has it on: its saved mask, home and mute, so
+ * that edit's undone (its other pending edits, its params, stay). Null for
+ * one that isn't so: off in the room too, or one you're adding (no saved
+ * one), or on some light still.
+ */
+export function savedOnOf(layer: Layer, all: readonly number[]): ShaderPatch | null {
+  const saved = layer.shader;
+  if (!saved || !shaderOn(saved)) return null;
+  const lit = onFor(layer);
+  if (all.some(lit)) return null;
+  return { muted: saved.muted, mask: [...saved.mask], ...(saved.instance ? { home: [...saved.instance.home] } : {}) };
+}
 
 /** Whether two masks name the same lights. */
 export function sameMask(a: readonly number[], b: readonly number[]): boolean {

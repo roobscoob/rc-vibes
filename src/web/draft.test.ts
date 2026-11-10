@@ -43,7 +43,7 @@ vi.mock("./scene.ts", () => {
   };
 });
 
-const { applyDraft, changedLights, changesByLayer, currentDraft, drafts, EMPTY, keyNow, layerOf, layersOf, opsOf, pendingCount, reachOf, reorderWithin, roomtoneChanges, muteFor, selectionSwitch, switchEverywhere, switchFor, switchState, templateOf } =
+const { applyDraft, changedLights, changesByLayer, currentDraft, drafts, EMPTY, keyNow, layerOf, layersOf, opsOf, pendingCount, reachOf, reorderWithin, roomtoneChanges, muteFor, savedOnOf, selectionSwitch, switchEverywhere, switchFor, switchState, templateOf } =
   await import("./draft.ts");
 const { sendUpdate } = await import("./scene.ts");
 
@@ -644,6 +644,20 @@ describe("switching a shader on and off", () => {
   it("switched on for lights outside its home, takes them into it", () => {
     expect(switchFor({ ...homed(), mask: [1, 2, 4, 5, 6] }, [2, 6], true, ALL)).toEqual({ mask: [1, 4, 5], home: [1, 2, 3, 6] });
     expect(switchFor({ ...homed(), muted: true }, [3, 4], true, ALL)).toEqual({ muted: false, mask: [1, 2, 5, 6], home: [1, 2, 3, 4] });
+  });
+
+  it("switched off by a pending edit, goes back on the lights the room has it on; off in the room too, it hasn't any to go back to", () => {
+    const saved = room(shader(9, { key: "i", instance, mask: [3, 4, 5, 6] }));
+    drafts.patchShader("i", switchEverywhere(layerOf(saved, currentDraft(), "i")!, false, ALL));
+    const off = layerOf(saved, currentDraft(), "i")!;
+    expect(savedOnOf(off, ALL)).toEqual({ muted: false, mask: [3, 4, 5, 6], home: [1, 2, 3] });
+    drafts.patchShader("i", savedOnOf(off, ALL)!);
+    expect(pendingCount(saved, currentDraft())).toBe(0);
+    // Still on some light: nothing to undo.
+    expect(savedOnOf(homed(), ALL)).toBeNull();
+    // Off in the room too.
+    const offAlready = room(shader(9, { key: "i", instance, mask: [1, 2, 3, 4, 5, 6] }));
+    expect(savedOnOf(layerOf(offAlready, EMPTY, "i")!, ALL)).toBeNull();
   });
 
   it("put in some other way, is only muted or not", () => {

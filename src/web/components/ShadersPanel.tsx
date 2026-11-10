@@ -22,7 +22,8 @@
 //
 // The switch is about whatever's selected (of the lights shaders can light:
 // not the old bulbs). With nothing selected, it's about every one of them:
-// Off takes it off them all, On puts it on them all. With some
+// Off takes it off them all; On undoes a pending Off (back on the lights the
+// room has it on), or else puts it on them all. With some
 // selected, it's about them; while it's on for some of them, both sides are
 // lit, with how many of them each is ("12 off · 5 on"): On is on for all
 // of them, taking any outside its home in, and Off is off for all of them.
@@ -46,6 +47,7 @@ import {
   reorderWithin,
   onFor,
   muteFor,
+  savedOnOf,
   selectionSwitch,
   switchEverywhere,
   switchFor,
@@ -281,9 +283,10 @@ const litOf = (layer: Layer, ids: readonly number[]) => ids.filter(onFor(layer))
 /**
  * A sketch's switch, as LayerSwitch shows it, and the edit switching it on
  * or off makes (its mask: draft.ts' switchFor): about the selection (scope),
- * or with none, the whole sketch: off masks it off every light, on puts it
- * on every light shaders can light (`capable`), its home grown to take them
- * all in.
+ * or with none, the whole sketch: off masks it off every light; on, if it
+ * was only switched off by a pending edit, undoes that (back on the lights
+ * the room has it on: savedOnOf), and otherwise puts it on every light
+ * shaders can light (`capable`), its home grown to take them all in.
  */
 function switchOf(
   layer: Layer,
@@ -296,7 +299,11 @@ function switchOf(
     return { state: s.state, on: s.on, off: s.of - s.on, press: (on) => switchFor(layer, scope, on, every) };
   }
   const lit = litOf(layer, every).length;
-  return { state: lit > 0 ? "on" : "off", on: lit, off: 0, press: (on) => (on ? switchFor(layer, capable, true, every) : switchEverywhere(layer, false, every)) };
+  const press = (on: boolean): ShaderPatch => {
+    if (!on) return switchEverywhere(layer, false, every);
+    return savedOnOf(layer, every) ?? switchFor(layer, capable, true, every);
+  };
+  return { state: lit > 0 ? "on" : "off", on: lit, off: 0, press };
 }
 
 function ShaderRow({ layer, going, changed, here, all, scene, scope, open, onToggle, onPick, onSwitch, onSelect, drag }: RowProps) {
