@@ -1184,6 +1184,19 @@ kbd {
   touch-action: none;
 }
 
+/* In the layers panel, every row's chevron (or its dot) says it's what's
+   dragged, whether or not that row can move. */
+.shader-row .layer-chevron {
+  cursor: grab;
+}
+
+/* While a layer's carried, the grabbing hand everywhere, whatever's under
+   the pointer (the row follows it only up and down). */
+html.dragging-layer,
+html.dragging-layer * {
+  cursor: grabbing !important;
+}
+
 .layer.dragging .layer-handle {
   cursor: grabbing;
   background: var(--fill-3);
@@ -1241,8 +1254,20 @@ kbd {
   width: 36px;
 }
 
-/* Being taken out, when you apply: crossed out, with Keep in its switch's place. */
+/* Being taken out, when you apply: grey, its name crossed out (not its
+   asterisk), with Restore (or Keep) in its switch's place. */
 .layer.going .layer-name {
+  color: var(--mute);
+  text-decoration: none;
+}
+
+.layer.going .layer-name-text {
+  color: var(--mute);
+  text-decoration: line-through;
+}
+
+/* The selection's row for one going: its name's text is all there is in it. */
+.layer.going:not(.shader-row) .layer-name {
   text-decoration: line-through;
 }
 
@@ -1950,6 +1975,10 @@ button.quiet.add-sketch-section-action {
 .layer-chevron svg {
   transform: rotate(180deg);
   transition: transform 0.2s var(--ease-out);
+  /* The button is all the pointer finds, never its arrow's shapes: Firefox
+     shows the wrong cursor over SVG shapes inside a button, flipping off its
+     grab hand as the pointer moves between the svg and its path. */
+  pointer-events: none;
 }
 
 .layer.open .layer-chevron svg {

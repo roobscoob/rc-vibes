@@ -724,11 +724,12 @@ function GoingRow({ layer }: { layer: Layer }) {
 
 /**
  * The stack (top first) with the shaders the draft takes out back in it,
- * each just above the one under it in the room (the lowest first, so one
- * over another going too goes above it).
+ * each just above the one under it in the room, or, moved since (`order`,
+ * the draft's, which keeps their keys), in the place it was moved to (the
+ * lowest first, so one over another going too goes above it).
  */
-export function withGoing(stack: Layer[], going: Layer[], scene: Scene): Layer[] {
-  const keys = scene.shaders.map((s) => s.key);
+export function withGoing(stack: Layer[], going: Layer[], scene: Scene, order: readonly string[] | null = null): Layer[] {
+  const keys = order && going.every((l) => order.includes(l.key)) ? [...order] : scene.shaders.map((s) => s.key);
   const all = [...stack];
   for (const layer of [...going].sort((a, b) => keys.indexOf(b.key) - keys.indexOf(a.key))) {
     const under = keys.slice(keys.indexOf(layer.key) + 1).find((k) => all.some((l) => l.key === k));

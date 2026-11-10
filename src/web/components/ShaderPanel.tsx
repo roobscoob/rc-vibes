@@ -121,8 +121,8 @@ export function RemoveShader({ layer }: { layer: Layer }) {
   // Null until it's asked; false once it's been cancelled, which puts the keyboard back on Delete.
   const [asking, setAsking] = useState<boolean | null>(null);
   const outside = layer.sketch === null;
-  // Taken out, its row is shown going, with Keep it where its actions were: the keyboard goes on to that.
-  const out = (e: MouseEvent<HTMLElement>) => refocusRow(e, () => drafts.remove(layer.key), ".shader-actions button");
+  // Taken out, its row is shown going, with Restore where its switch was: the keyboard goes on to that.
+  const out = (e: MouseEvent<HTMLElement>) => refocusRow(e, () => drafts.remove(layer.key), ".layer-keep");
   if (!asking) {
     return (
       <button

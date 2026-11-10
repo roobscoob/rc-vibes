@@ -136,6 +136,16 @@ describe("the stack with pending edits", () => {
     expect(pendingCount(live, currentDraft())).toBe(1);
   });
 
+  it("keeps a place for one being taken out (moved while it's going), sending nothing of it, and puts it back there", () => {
+    const three = room(shader(13), shader(12), shader(11));
+    drafts.remove("rclamp-12");
+    drafts.reorder(["rclamp-13", "rclamp-11", "rclamp-12"]);
+    expect(layersOf(three, currentDraft()).map((l) => l.key)).toEqual(["rclamp-13", "rclamp-11"]);
+    expect(opsOf(three, currentDraft())).toEqual([["shaders/rclamp-12"]]);
+    drafts.keep("rclamp-12");
+    expect(layersOf(three, currentDraft()).map((l) => l.key)).toEqual(["rclamp-13", "rclamp-11", "rclamp-12"]);
+  });
+
   it("rearranges some shaders among their own places, leaving the rest put", () => {
     expect(reorderWithin(["a", "b", "c", "d", "e"], ["d", "b"])).toEqual(["a", "d", "c", "b", "e"]);
     expect(reorderWithin(["a", "b", "c"], [])).toEqual(["a", "b", "c"]);
