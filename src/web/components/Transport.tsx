@@ -4,8 +4,8 @@
 // on the beat, warm on a bar's first; the beats a minute, click to type;
 // Tap; Sync, this beat's a bar's first), and the nudge, and ending the show.
 // It's there for everyone while a show's on; with none, the clock rests
-// (shared/show.ts). A show starts (and ends, too) from the account menu:
-// ShowMenuItem, in it and the row's own menu.
+// (shared/show.ts). A show starts from the scenes' row (ScenesDrawer.tsx),
+// and ends from this row's own menu (ShowMenuItem).
 // Each acts on the room's one clock at once, live mode or not: it's the
 // room's, never a pending edit. A press is put in arclamp's time as it
 // happened (rtime.ts), so it lands where it was meant however long it takes
@@ -54,7 +54,7 @@ export const press = (act: (e: { timeStamp: number }) => void) => ({
   },
 });
 
-/** A menu's item starting a show, for the whole room, or, with one on, ending it. */
+/** The show row's menu's item ending the show, for the whole room (or, with none on, starting one). */
 export function ShowMenuItem() {
   const on = useShowOn();
   const [error, setError] = useState<string | null>(null);
