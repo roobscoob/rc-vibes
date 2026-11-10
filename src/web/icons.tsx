@@ -92,13 +92,6 @@ export const ChevronUpIcon = () => (
   </Svg>
 );
 
-/** Six dots in two columns: a handle to drag something by. */
-export const GripIcon = () => (
-  <Svg width="12" height="12" strokeWidth="0" fill="currentColor">
-    {[5.5, 10.5].flatMap((x) => [3.5, 8, 12.5].map((y) => <circle key={`${x},${y}`} cx={x} cy={y} r="1.25" />))}
-  </Svg>
-);
-
 /** A pencil, for editing (renaming). */
 export const PencilIcon = () => (
   <Svg>
@@ -125,22 +118,6 @@ export const PencilRulerIcon = () => (
     <path d="m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17" />
     <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
     <path d="m15 5 4 4" />
-  </Svg>
-);
-
-/** A dashed box round a light: the lights a shader's on, to pick on the map. */
-export const DomainIcon = () => (
-  <Svg>
-    <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" strokeDasharray="2.2 2.2" />
-    <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
-  </Svg>
-);
-
-/** A target: a layer's lights alone, everything else out of sight. */
-export const FocusIcon = () => (
-  <Svg>
-    <circle cx="8" cy="8" r="5.5" />
-    <circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none" />
   </Svg>
 );
 

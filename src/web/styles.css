@@ -323,8 +323,8 @@ kbd {
    map's bottom instead. */
 
 .app {
-  --panel-w: 360px;
-  --shaders-w: 300px;
+  --panel-w: 330px;
+  --shaders-w: var(--panel-w);
   /* The map's overlays, and what it fits, keep clear of the HUD and the panels over its edges. */
   --inset-top: calc(var(--hud-h, 56px) + 8px);
   --inset-right: calc(var(--panel-w) + var(--gap));
@@ -582,82 +582,6 @@ kbd {
 .sketch-behind button.quiet:hover:not(:disabled) {
   background: color-mix(in srgb, var(--warn) 28%, transparent);
   color: var(--warn);
-}
-
-/* The row the map's about (in focus, or its domain being edited): its name glowing in the focus blue. */
-.layer.shader-row.active .layer-name {
-  color: var(--focus);
-  text-shadow: 0 0 10px color-mix(in srgb, var(--focus) 55%, transparent);
-}
-
-/* And just before its chevron, at the end of its head, which: Focus's target, or
-   Edit's dashed box, filled in the blue as its button is while it's on. As
-   big as the chevron, so the two sit alike. */
-.layer-mode-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: var(--focus);
-  color: var(--focus-ink);
-  /* Glowing, as the save button does when lit, in the focus blue. */
-  box-shadow:
-    0 0 12px color-mix(in srgb, var(--focus) 45%, transparent),
-    0 0 2px color-mix(in srgb, var(--focus) 60%, transparent);
-}
-
-.layer-mode-icon svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* Pressed, it turns it off: brighter, glowing more, under the pointer, as the save button does. */
-.layer-mode-icon {
-  padding: 0;
-  transition:
-    background 0.2s,
-    color 0.2s,
-    box-shadow 0.2s;
-}
-
-.layer-mode-icon:hover {
-  background: color-mix(in srgb, var(--focus) 80%, white);
-  box-shadow:
-    0 0 18px color-mix(in srgb, var(--focus) 60%, transparent),
-    0 0 3px color-mix(in srgb, var(--focus) 80%, transparent);
-}
-
-/* Editing a layer's domain (ShadersPanel.tsx), a button under its Domain, lit while it is. */
-/* Focus and Edit, over a layer's Domain: a row of their own, each half of
-   it (or, with only Focus, all of it), and, for one made outside vibes, its
-   Delete square at the end, its confirm wrapping under them all. */
-.layer-modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.layer-modes > button.quiet.shader-delete {
-  flex: none;
-  width: 30px;
-  padding: 0;
-}
-
-.layer-modes > button.quiet {
-  flex: 1 1 0;
-  justify-content: center;
-  min-width: 0;
-  height: 30px;
-  padding: 0 10px;
-  font-size: 12.5px;
-}
-
-.layer-modes button.quiet.domain-edit.on,
-.layer-modes button.quiet.layer-focus.on {
-  background: var(--focus);
-  color: var(--focus-ink);
 }
 
 .chip-count {
@@ -1952,14 +1876,12 @@ button.quiet.add-sketch-section-action {
   font-size: 12.5px;
 }
 
-.shader-actions button.quiet,
-.layer-modes .confirm-delete button.quiet {
+.shader-actions button.quiet {
   height: 28px;
   padding: 0 10px;
 }
 
-.shader-actions .confirm-delete,
-.layer-modes .confirm-delete {
+.shader-actions .confirm-delete {
   flex-basis: 100%;
 }
 
@@ -1969,23 +1891,19 @@ button.quiet.add-sketch-section-action {
   gap: 7px;
 }
 
-.shader-actions .confirm-delete,
-.layer-modes .confirm-delete {
+.shader-actions .confirm-delete {
   justify-content: flex-start;
 }
 
 /* Taking a layer out (or not adding it): like the other actions until it's
    pointed at, then red, as a card menu's Delete is (not the warning orange
    quiet danger buttons have elsewhere). */
-.shader-actions button.quiet.danger,
-.layer-modes button.quiet.danger {
+.shader-actions button.quiet.danger {
   color: var(--ink-2);
 }
 
 .shader-actions button.quiet.danger:hover:not(:disabled),
-.shader-actions button.quiet.danger:focus-visible,
-.layer-modes button.quiet.danger:hover:not(:disabled),
-.layer-modes button.quiet.danger:focus-visible {
+.shader-actions button.quiet.danger:focus-visible {
   background: rgb(66 26 22 / 0.8);
   color: var(--bad);
 }
@@ -2123,6 +2041,80 @@ button.layer-chevron:hover {
 .shader-row .layer-name {
   display: flex;
   align-items: center;
+}
+
+.layer-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In the layers panel, a row's domain in words wraps onto as many lines as
+   it takes: its head grows to fit (at least --head-h), and, as it may be
+   taller than that, it lights up under the pointer itself, with its stop's
+   piece of the rail (the head reaching back over the gap to it), rather
+   than the row painting --head-h of itself. */
+.layer.shader-row > .layer-head {
+  height: auto;
+  min-height: var(--head-h, 56px);
+  margin-left: -10px;
+  padding-left: 10px;
+}
+
+.shader-row .layer-meta {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.layer.shader-row:has(> .layer-head.toggle:hover) {
+  background: none;
+}
+
+.layer.shader-row:has(> .layer-head.toggle:hover) > .layer-rail,
+.layer.shader-row:has(> .layer-head.toggle:hover) > .layer-head {
+  background: var(--fill);
+}
+
+/* Its switch, Off · On (the old bulbs' own), at its usual size. */
+.segmented.layer-switch {
+  flex: none;
+}
+
+/* Its highlight stretches and shrinks between one side and both, as well
+   as sliding: placed by its two edges, each a share of the switch's width
+   (not by its own width, and moved by that), so as the switch changes width
+   with its words, the highlight stays inside it all the way through. */
+.segmented.layer-switch .segmented-thumb {
+  --side: calc((100% - 6px) / var(--count));
+  right: calc(3px + (var(--count) - 1 - var(--index)) * var(--side));
+  left: calc(3px + var(--index) * var(--side));
+  width: auto;
+  transform: none;
+  transition:
+    left 0.24s cubic-bezier(0.3, 0.7, 0.2, 1),
+    right 0.24s cubic-bezier(0.3, 0.7, 0.2, 1),
+    background 0.24s;
+}
+
+/* On for some of the selected lights: one highlight over both sides, as
+   a chosen side's is, their words as an unchosen side's.
+   Under the pointer, a side's words light up all the way: what pressing it
+   would make. */
+.segmented.layer-switch.all .segmented-thumb {
+  right: 3px;
+  left: 3px;
+}
+
+.sidebar .segmented.layer-switch.all button {
+  color: var(--mute);
+  transition: color 0.15s;
+}
+
+.sidebar .segmented.layer-switch.all button:hover:not(:disabled),
+.sidebar .segmented.layer-switch.all button:focus-visible {
+  color: var(--ink);
 }
 
 button.layer-name-button {
@@ -5056,146 +5048,3 @@ html {
   width: 140px;
 }
 
-/* The map about one layer (layer-mode.ts: in focus, or its domain being
-   edited), either way alike: its window ringed in the blue with a soft
-   vignette, and in the HUD a pill saying whose. */
-/* The map's window (what's between the panels: --window-left and
-   --window-right), ringed in the blue, with a blue vignette toward its
-   edges and the faintest blue wash over it. */
-.app {
-  --window-left: var(--shaders-w);
-  --window-right: var(--panel-w);
-}
-
-.app.layer-mode .stage::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: var(--window-right);
-  bottom: 0;
-  left: var(--window-left);
-  z-index: 1;
-  /* Inside the ring, the faintest wash of the blue. */
-  background: color-mix(in srgb, var(--focus) 1%, transparent);
-  box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb, var(--focus) 70%, transparent),
-    inset 0 0 24px color-mix(in srgb, var(--focus) 12%, transparent),
-    inset 0 0 54px color-mix(in srgb, var(--focus) 9%, transparent);
-  pointer-events: none;
-}
-
-/* With streetview, the shaders step aside: the window starts at the map's edge. */
-.app.in-streetview {
-  --window-left: 0px;
-}
-
-/* A phone has nothing beside its map. */
-@media (max-width: 800px) {
-  .app {
-    --window-left: 0px;
-    --window-right: 0px;
-  }
-}
-
-/* In the HUD's row with the avatars, but centered over the map between the
-   panels (the row's padding: --inset-left, --inset-right), however wide the
-   avatars and account beside it are. It doesn't take room from them. */
-.hud-bar {
-  position: relative;
-}
-
-.domain-banner-wrap {
-  position: absolute;
-  top: 0;
-  right: var(--inset-right);
-  bottom: 0;
-  left: var(--inset-left);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.domain-banner-wrap > * {
-  pointer-events: auto;
-}
-
-/* As the tone box (.tone-box): a 1px rim, its words in the edit's blue, its parts
-   inset from it as far as they are apart, each rounded inside the pill's
-   rounding. */
-.domain-banner {
-  --banner-gap: 3px;
-  --banner-pad: calc(var(--banner-gap) + 1px);
-  --banner-radius: 14px;
-  display: flex;
-  align-items: center;
-  gap: var(--banner-gap);
-  max-width: 100%;
-  padding: var(--banner-pad);
-  border-radius: var(--banner-radius);
-  background: var(--glass-strong);
-  -webkit-backdrop-filter: var(--blur);
-  backdrop-filter: var(--blur);
-  /* The glass's own faint rim, as the panels' edges: the blue is the words'. */
-  box-shadow:
-    inset 0 0 0 1px var(--edge),
-    var(--float);
-  pointer-events: auto;
-  animation: domain-banner-in 0.25s var(--ease-out);
-}
-
-@keyframes domain-banner-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-}
-
-.domain-banner-text {
-  min-width: 0;
-  padding: 0 10px 0 9px;
-  overflow: hidden;
-  color: var(--focus);
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Its buttons, as the tone box's tabs: each rounded inside the pill's
-   rounding. The × on the left closes it, square, quiet until it's pointed
-   at; the action on the right (Save, Edit) is filled. */
-.domain-banner button {
-  flex: none;
-  height: 30px;
-  padding: 0 14px;
-  border-radius: calc(var(--banner-radius) - var(--banner-pad));
-  background: var(--fill);
-  color: var(--mute);
-  font-size: 12.5px;
-  font-weight: 550;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.domain-banner .domain-banner-close {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  padding: 0;
-  background: none;
-}
-
-/* The text's own left inset is the ×'s to keep, not its own as well. */
-.domain-banner-close + .domain-banner-text {
-  padding-left: 2px;
-}
-
-.domain-banner button:hover:not(:disabled) {
-  background: var(--fill-2);
-  color: var(--ink);
-}
-
-.domain-banner button:disabled {
-  opacity: 0.5;
-}
