@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { LightInfo, Rail } from "../shared/arclamp.ts";
 import { isBinary } from "../shared/fixtures.ts";
-import { inMainSpace } from "../shared/tags.ts";
 import { useAddingBuilds } from "./adding.ts";
 import { RequestError, useMe, useStreetViews } from "./api.ts";
 import { useLights, useScene, type Scene } from "./scene.ts";
@@ -70,19 +69,8 @@ function Shell() {
   }, []);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [floor, setFloor] = useState<number>(initialFloor);
-  // Every light: everything below takes its lights from here.
+  // Every light: everything below takes its lights from here. Nothing's selected to start with.
   const all = useMemo(() => lights.data?.lights ?? [], [lights.data]);
-  // Once the lights are here, the main space is what's selected to start with (on this floor, if any of it's here).
-  const started = useRef(false);
-  // That start, kept to tell it from a selection made by hand: only those are anyone else's business.
-  const startedWith = useRef<ReadonlySet<number> | null>(null);
-  useEffect(() => {
-    if (started.current || all.length === 0) return;
-    started.current = true;
-    const start = new Set(all.filter((l) => l.coords?.floor === floor && inMainSpace(l.tags)).map((l) => l.id));
-    startedWith.current = start;
-    setSelected(start);
-  }, [all, floor]);
 
   // Pending edits put vibes in simulated mode: the map shows the preview of
   // them until they're saved (the panel's save button). So does peeking at a
@@ -162,9 +150,8 @@ function Shell() {
   const anyUnplaced = useMemo(() => all.some((l) => !l.coords), [all]);
   const selectedHere = useMemo(() => selectedAmong(selected, here), [here, selected]);
   // Who else is here: where you are, for them; what they've selected on this floor, for the map.
-  // Not the selection everyone starts with, though, which would ring the whole main space for each of them.
   const selectedOnFloor = useMemo(() => selectedAmong(selected, onFloor), [onFloor, selected]);
-  useSharePresence(floor, selected === startedWith.current ? NO_LIGHTS : selectedOnFloor);
+  useSharePresence(floor, selectedOnFloor);
   const others = useOthers();
   const othersHere = useMemo(() => othersByLight(others), [others]);
   // The selected lights that make a color (not the old bulbs, just on or off): what the look card shows.

@@ -26,7 +26,7 @@ export function tagLabel(tag: string): string {
 /**
  * The main space: the open floor (couches, dining room, presentation space,
  * kitchen, lobby), as against the named rooms. A light with any of these tags
- * is in it. What vibes starts with selected.
+ * is in it.
  */
 export const MAIN_SPACE_TAGS = new Set(["couches", "dining-room", "presentation-space", "kitchen", "lobby", "dave"]);
 
@@ -43,7 +43,7 @@ export const inSideRooms = (tags: readonly string[] | null | undefined) => (tags
  * "*side" are the places (every light in any of their tags), the rest tags.
  * Tags not in it come after, by name.
  */
-export const GROUP_ORDER = ["*main", "presentation-space", "lobby", "dave", "kitchen", "dining-room", "couches", "*side", "sammet", "hopper", "turing", "ritchie"];
+export const GROUP_ORDER = ["*main", "lobby", "dave", "presentation-space", "kitchen", "dining-room", "couches", "*side", "sammet", "hopper", "turing", "ritchie"];
 
 /** Where a group (a place's key, or a tag) comes in GROUP_ORDER; past the end, if it isn't in it. */
 export const groupRank = (key: string) => {

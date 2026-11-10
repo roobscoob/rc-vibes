@@ -40,7 +40,7 @@ describe("the groups' order", () => {
   it("is the main space and its parts, then the side rooms and theirs; other tags after, by name", () => {
     const given = ["ritchie", "kitchen", "*side", "couches", "presentation-space", "turing", "dave", "*main", "dining-room", "lobby", "hopper", "sammet", "attic"];
     const sorted = [...given].sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b));
-    expect(sorted).toEqual(["*main", "presentation-space", "lobby", "dave", "kitchen", "dining-room", "couches", "*side", "sammet", "hopper", "turing", "ritchie", "attic"]);
+    expect(sorted).toEqual(["*main", "lobby", "dave", "presentation-space", "kitchen", "dining-room", "couches", "*side", "sammet", "hopper", "turing", "ritchie", "attic"]);
   });
 
   it("puts a light in the side rooms by any of their tags", () => {
