@@ -21,6 +21,7 @@ let db: Db;
 let shaders: Map<number, ShaderDescriptor>;
 let instances: Instances;
 let app: Hono<AuthEnv>;
+let svc: ReturnType<typeof createShaders>;
 // What arclamp was asked to do, in order.
 let calls: string[];
 
@@ -66,6 +67,11 @@ beforeEach(() => {
       calls.push(`mask ${id} ${mask.join(",")}`);
       shaders.set(id, { ...shaders.get(id)!, mask });
     },
+    setMaskAt: async (id: number, mask: number[], schedule: { at: number }) => {
+      calls.push(`mask ${id} ${mask.join(",")} at ${schedule.at}`);
+      shaders.set(id, { ...shaders.get(id)!, mask });
+      return null;
+    },
     // As arclamp does: taken out of the stack, and put back in at `position`.
     moveShader: async (id: number, position: number) => {
       calls.push(`move ${id} ${position}`);
@@ -91,7 +97,7 @@ beforeEach(() => {
       c.set("user", ada);
       await next();
     })
-    .route("/", shaderRoutes(createShaders({ config, arclamp, db, instances })));
+    .route("/", shaderRoutes((svc = createShaders({ config, arclamp, db, instances }))));
   app.onError(handleError);
 });
 
@@ -127,6 +133,17 @@ describe("shaders, by key", () => {
       ["shader.mask", 11, "Shader #11"],
       ["shader.mute", 11, "Shader #11"],
     ]);
+  });
+
+  it("go on and off on a frame: an instance by its mask alone (off its whole home, or on all of it, unmuted if it was muted), any other by its mute", async () => {
+    const id = await putIn([1, 2], true);
+    const shader = db.instance(id)!.shader_id!;
+    shaders.set(shader, { ...shaders.get(shader)!, muted: true });
+    calls = [];
+    await svc.setOnAt(id, false, { at: 100 }, ada);
+    await svc.setOnAt(id, true, { at: 200, id: "s" }, ada);
+    await svc.setOnAt("rclamp-11", false, { at: 300 }, ada);
+    expect(calls).toEqual([`mask ${shader} 1,2,3,4 at 100`, `mask ${shader} 3,4 at 200`, `muted ${shader} false at 200`, "muted 11 true at 300"]);
   });
 
   it("keep an instance off everything outside its home", async () => {

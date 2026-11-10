@@ -63,7 +63,7 @@ describe("the timeline played", () => {
       scenes: { tree: () => ({ list, order: Object.keys(list) }) },
       room: () => ({ shaders, stack: Object.keys(shaders), pools }),
       shaders: {
-        setMutedAt: async (key, muted, s) => (mutes.push({ key, muted, ...s }), s.at),
+        setOnAt: async (key, on, s) => (mutes.push({ key, muted: !on, ...s }), s.at),
         idOf: (key) => ({ a: 11, b: 12 })[key] ?? null,
       },
       arclamp: { evalAt: async (shaderId, code, s) => (evals.push({ shaderId, code, ...s }), true) },

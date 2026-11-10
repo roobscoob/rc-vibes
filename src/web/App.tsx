@@ -5,11 +5,9 @@ import { inMainSpace } from "../shared/tags.ts";
 import { useAddingBuilds } from "./adding.ts";
 import { RequestError, useMe, useStreetViews } from "./api.ts";
 import { useLights, useScene, type Scene } from "./scene.ts";
-import { applyDraft, changeable, currentDraft, domainOf, domainPatch, drafts, layersOf, pendingCount, templateOf, useDraft, type Draft } from "./draft.ts";
+import { applyDraft, drafts, layersOf, pendingCount, templateOf, useDraft, type Draft } from "./draft.ts";
 import { setLiveStuck } from "./unsaved.ts";
 import { useHint } from "./hint.ts";
-import { layerMode, useLayerMode } from "./layer-mode.ts";
-import { DomainBanner, FocusBanner } from "./components/DomainBanner.tsx";
 import { Banners } from "./components/Banners.tsx";
 import { ColorPreview } from "./components/ColorPreview.tsx";
 import { Login } from "./components/Login.tsx";
@@ -23,8 +21,7 @@ import { setShowingRoom, useLiveStream } from "./live.ts";
 import { useNarrow } from "./narrow.ts";
 import { ROOM_TONE, SAVED, usePeek } from "./peek.ts";
 import { othersByLight, useOthers, useSharePresence } from "./presence.ts";
-import type { Rgb } from "../shared/presence.ts";
-import { savedFloor, saveFloor, useLiveMode } from "./settings.ts";
+import { savedFloor, saveFloor, useLiveMode, useShowMode } from "./settings.ts";
 import { useSimulation } from "./sim.ts";
 import { navigate, usePath, useQueryParam } from "./route.ts";
 import { SplitHandle, StreetView } from "./components/StreetView.tsx";
@@ -33,8 +30,6 @@ import { SketchPages } from "./sketches/SketchPages.tsx";
 
 const NO_RAILS: Rail[] = [];
 const NO_LIGHTS: ReadonlySet<number> = new Set();
-// The focus blue (styles.css's --focus): the map's rings while a domain's being edited, or a layer's in focus.
-const FOCUS_BLUE: Rgb = [0x8f, 0xb9, 0xff];
 const NO_SCENE: Scene = { shaders: [], roomtone: null, pools: {} };
 
 export function App() {
@@ -159,38 +154,14 @@ function Shell() {
   useAddingBuilds();
   useSimulation(simulated, simInputs);
 
-  // The map about one layer (layer-mode.ts): in focus, or its domain being
-  // edited. Its layer gone, it's let go of.
-  const mode = useLayerMode();
-  const modeLayer = mode === null ? null : (layersOf(live, draft).find((l) => l.key === mode.key) ?? null);
-  useEffect(() => {
-    if (mode !== null && !modeLayer) layerMode.exit();
-  }, [mode, modeLayer]);
-  // Editing a shader's domain: the map turns into a shader selector, showing
-  // the lights in the domain as edited as selected, and picking them as
-  // they're selected any other time (the same rules: selectionWith), the
-  // lights on other floors kept. Saved, it's a pending edit like any other:
-  // the shader on just those lights.
-  const editing = mode?.kind === "edit" ? mode : null;
-  const editLayer = editing ? modeLayer : null;
-  // A layer in focus: just its lights, everywhere below. The map shows only
-  // them, and the panels, the groups and the selection only know of them:
-  // the selection's clamped to them, not changed, so what's selected outside
-  // them is still selected when the focus is let go of (Exit, Escape, or the
-  // layer's gone). Not while a domain's being edited: that needs every light to add.
-  const soloLayerNow = mode?.kind === "focus" ? modeLayer : null;
-  const soloing = soloLayerNow !== null;
-  const focusIds = useMemo(() => (soloing ? new Set(domainOf(soloLayerNow)) : null), [soloing, soloLayerNow]);
-  const mapLights = useMemo(() => (focusIds ? all.filter((l) => focusIds.has(l.id)) : all), [focusIds, all]);
-
-  // Only the lights on the floor you're looking at (and in focus, if a layer
-  // is) can be selected, and so changed. Switching floors lets go of the selection.
+  // Only the lights on the floor you're looking at can be selected, and so
+  // changed. Switching floors lets go of the selection.
   const onFloor = useMemo(() => all.filter((l) => l.coords?.floor === floor), [all, floor]);
-  const here = useMemo(() => (focusIds ? onFloor.filter((l) => focusIds.has(l.id)) : onFloor), [onFloor, focusIds]);
+  const here = onFloor;
   // Lights on no floor's plan yet, waiting in the drawer.
   const anyUnplaced = useMemo(() => all.some((l) => !l.coords), [all]);
   const selectedHere = useMemo(() => selectedAmong(selected, here), [here, selected]);
-  // Who else is here: where you are, for them; what they've selected (all of it on this floor, focus or not), for the map.
+  // Who else is here: where you are, for them; what they've selected on this floor, for the map.
   // Not the selection everyone starts with, though, which would ring the whole main space for each of them.
   const selectedOnFloor = useMemo(() => selectedAmong(selected, onFloor), [onFloor, selected]);
   useSharePresence(floor, selected === startedWith.current ? NO_LIGHTS : selectedOnFloor);
@@ -205,46 +176,9 @@ function Shell() {
     saveFloor(String(id));
   };
 
-  // In focus, a change to the selection is a change to just the lights in
-  // it: a replace (or letting go of everything) keeps what's selected outside.
-  const focusNow = useRef(focusIds);
-  focusNow.current = focusIds;
   const select = useCallback((ids: number[], mode: SelectMode) => {
-    const focus = focusNow.current;
-    setSelected((prev) =>
-      focus
-        ? selectionWith(
-            prev,
-            ids.filter((id) => focus.has(id)),
-            mode,
-            focus,
-          )
-        : selectionWith(prev, ids, mode),
-    );
+    setSelected((prev) => selectionWith(prev, ids, mode));
   }, []);
-
-  const domainHere = useMemo(() => {
-    if (!editing) return NO_LIGHTS;
-    return new Set(here.filter((l) => editing.ids.has(l.id)).map((l) => l.id));
-  }, [editing, here]);
-  const mapSelect = useCallback(
-    (ids: number[], mode: SelectMode) => {
-      const now = layerMode.get();
-      if (now?.kind !== "edit") return select(ids, mode);
-      // The map only has this floor's lights: a replace replaces just those.
-      layerMode.update(selectionWith(now.ids, ids, mode, new Set(here.map((l) => l.id))));
-    },
-    [select, here],
-  );
-  // Every light's id: what a shader's mask is masked from.
-  const everyId = useMemo(() => all.map((l) => l.id), [all]);
-  const saveDomain = useCallback(() => {
-    const now = layerMode.get();
-    const edit = now?.kind === "edit" ? now : null;
-    const layer = edit && layersOf(live, currentDraft()).find((l) => l.key === edit.key);
-    if (edit && layer) drafts.patchShader(layer.key, domainPatch(layer, edit.ids, everyId));
-    layerMode.endEdit();
-  }, [live, everyId]);
 
   // Nothing moves the map but you: selecting (from either panel), focus,
   // streetview opening and closing all leave it where it is.
@@ -265,9 +199,9 @@ function Shell() {
     return picked ? null : hint.ids;
   }, [hint, here, selectedHere]);
   const leaving = useMemo(() => {
-    if (!hinted || editing) return NO_LIGHTS;
+    if (!hinted) return NO_LIGHTS;
     return hint?.leaving ? new Set([...hint.leaving].filter((id) => selectedHere.has(id))) : leavingFor(selectedHere, hinted);
-  }, [hint, hinted, editing, selectedHere]);
+  }, [hint, hinted, selectedHere]);
 
   // A camera on another floor shows that floor.
   const cameraFloor = cameras?.find((c) => c.id === streetView)?.floor;
@@ -279,12 +213,7 @@ function Shell() {
   // Escape lets go of the selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Editing a domain, Escape discards that first (back to its focus, if it came from one); then a layer's focus; then the selection.
-      const now = layerMode.get();
-      if (now?.kind === "edit") layerMode.endEdit();
-      else if (now) layerMode.exit();
-      else setSelected(new Set());
+      if (e.key === "Escape") setSelected(new Set());
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -323,10 +252,12 @@ function Shell() {
   // show starts from the account menu).
   const hasSelection = selectedHere.size > 0;
   const narrow = useNarrow();
+  // The scenes drawer, only in show mode (the account menu's).
+  const showMode = useShowMode();
   // With streetview open, the room from its camera takes one side and the map
   // (everything above, in its pane) the other, split as last dragged.
   return (
-    <div className={`app${hasSelection ? " has-selection" : ""}${streetView ? " in-streetview" : ""}${mode ? ` layer-mode ${mode.kind === "edit" ? "editing-domain" : "soloing"}` : ""}`} ref={app}>
+    <div className={`app${hasSelection ? " has-selection" : ""}${streetView ? " in-streetview" : ""}`} ref={app}>
       <Banners />
       <div className="app-body" ref={body}>
         {streetView && <StreetView id={streetView} onClose={closeStreetView} />}
@@ -339,16 +270,15 @@ function Shell() {
                 <p className="map-error">Couldn't load the lights: {lights.error.message}</p>
               ) : (
                 <RoomMap
-                  lights={mapLights}
+                  lights={all}
                   rails={lights.data?.rails ?? NO_RAILS}
                   floor={floor}
                   onFloor={showFloor}
                   changed={lights.data?.changed ?? 0}
-                  selected={editing ? domainHere : selectedHere}
-                  onSelect={mapSelect}
+                  selected={selectedHere}
+                  onSelect={select}
                   others={othersHere}
-                  hinted={editing || !hinted ? NO_LIGHTS : hinted}
-                  mine={mode ? FOCUS_BLUE : undefined}
+                  hinted={hinted ?? NO_LIGHTS}
                   leaving={leaving}
                   look={hasSelection && !narrow && colorLights.length > 0 && <ColorPreview lights={colorLights} />}
                   onStreetView={openStreetView}
@@ -356,23 +286,14 @@ function Shell() {
                 />
               )}
             </main>
-            {/* The scenes drawer (ScenesDrawer.tsx), along the map's bottom between the sidebars. */}
-            <ScenesDrawer onHeight={dockHeight} />
+            {/* The scenes drawer (ScenesDrawer.tsx), along the map's bottom between the sidebars, in show mode. */}
+            {showMode && <ScenesDrawer onHeight={dockHeight} />}
             <div className="hud" ref={hud}>
               <div className="hud-bar">
                 {lights.data && onFloor.length === 0 && (
                   <p className="map-note">
                     No lights on floor {floor} yet.{anyUnplaced ? " Drag them in from the drawer." : ""}
                   </p>
-                )}
-                {/* Editing a domain, or a layer in focus: its pill, in the row with the avatars. */}
-                {editing && editLayer && <DomainBanner layer={editLayer} edit={editing} onSave={saveDomain} onDiscard={layerMode.endEdit} />}
-                {soloing && (
-                  <FocusBanner
-                    layer={soloLayerNow}
-                    onEdit={changeable(soloLayerNow) ? () => layerMode.edit(soloLayerNow.key, domainOf(soloLayerNow)) : null}
-                    onExit={layerMode.exit}
-                  />
                 )}
                 <UserMenu />
               </div>

@@ -1,4 +1,5 @@
-// The scenes drawer, along the bottom of the map, always: the room's scenes
+// The scenes drawer, along the bottom of the map in show mode (the account
+// menu's; settings.ts): the room's scenes
 // (shared/scenes.ts), each a button that applies it, lit while the room
 // looks like it; and, in each one's menu, its name, its sketch (one in the
 // room, with its knobs as they are), its knobs taken from the room again,
@@ -9,6 +10,9 @@
 // Applying one outside a show is an edit to the room, as any other
 // (draft.ts): previewed till it's applied, or straight in, in live mode.
 // Changes to the scenes themselves are the room's, made at once.
+//
+// With no show on, Start show at the end of the scenes' row starts one, for
+// the whole room (ending it is the show's row's menu).
 //
 // While a show's on, the show's row (Transport.tsx) sits above the scenes,
 // and a scene applied goes on the show's clock, for everyone, whatever the
@@ -25,12 +29,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { pathOf, type Op } from "../../shared/live.ts";
-import { isBase, knobsOf, onScene, type Scene as SavedScene, type Scenes } from "../../shared/scenes.ts";
+import { isBase, knobsOf, onScene, shaderOn, type Scene as SavedScene, type Scenes } from "../../shared/scenes.ts";
 import type { CueMode } from "../../shared/show.ts";
 import { drafts } from "../draft.ts";
 import { MoreIcon } from "../icons.tsx";
 import { rOfEvent } from "../rtime.ts";
-import { sendApply, sendScenes, sendTransport, useScene, useScenes, useShowCue, useShowOn, useShowQueued, useTimeline, type Scene } from "../scene.ts";
+import { sendApply, sendScenes, sendTransport, useLights, useScene, useScenes, useShowCue, useShowOn, useShowQueued, useTimeline, type Scene } from "../scene.ts";
 import { Menu } from "./Menu.tsx";
 import { Segmented } from "./Segmented.tsx";
 import { ChipGhost, chipDrag, dropChip, putChip, Timeline } from "./Timeline.tsx";
@@ -125,6 +129,7 @@ export function ScenesDrawer({ onHeight }: { onHeight: (px: number) => void }) {
 function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: (() => void) | null }) {
   const scenes = useScenes();
   const room = useScene().data;
+  const lights = useLights().data?.lights;
   const showOn = useShowOn();
   const cue = useShowCue();
   const queued = useShowQueued();
@@ -144,7 +149,12 @@ function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: ((
     const scene = scenes.list[id];
     if (!scene || !room) return;
     if (showOn) said(sendApply(id, rOfEvent(e)));
-    else drafts.applyScene(scene, room);
+    else
+      drafts.applyScene(
+        scene,
+        room,
+        (lights ?? []).map((l) => l.id),
+      );
   };
 
   // In a show, 1 to 9 apply the scenes in order, away from anything typed in.
@@ -168,7 +178,7 @@ function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: ((
     if (!room) return;
     const id = crypto.randomUUID();
     const ops: Op[] = [[pathOf("scenes", "list", id), { name: nextName(scenes) }]];
-    const on = choosable(room).filter((s) => !s.muted);
+    const on = choosable(room).filter(shaderOn);
     if (on.length === 1) ops.push([pathOf("scenes", "list", id, "shaders", on[0]!.key), knobsOf(on[0]!, room.pools)]);
     else setFresh(id);
     send(ops);
@@ -205,6 +215,15 @@ function ScenesBar({ building, onTimeline }: { building: boolean; onTimeline: ((
       {onTimeline && (
         <button className={`scene-add${building ? " on" : ""}`} onClick={onTimeline} aria-pressed={building}>
           Timeline
+        </button>
+      )}
+      {!showOn && (
+        <button
+          className="scene-add"
+          onClick={(e) => said(sendTransport({ do: "start", at: rOfEvent(e) }))}
+          aria-label="Start show: for everyone, the show clock's row, the piece at 0:00, the beat going on"
+        >
+          Start show
         </button>
       )}
     </div>

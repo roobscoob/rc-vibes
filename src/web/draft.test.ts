@@ -43,7 +43,7 @@ vi.mock("./scene.ts", () => {
   };
 });
 
-const { applyDraft, changedLights, changesByLayer, currentDraft, drafts, EMPTY, keyNow, layerOf, layersOf, opsOf, pendingCount, reachOf, reorderWithin, roomtoneChanges, switchEverywhere, switchFor, switchState, templateOf } =
+const { applyDraft, changedLights, changesByLayer, currentDraft, drafts, EMPTY, keyNow, layerOf, layersOf, opsOf, pendingCount, reachOf, reorderWithin, roomtoneChanges, muteFor, selectionSwitch, switchEverywhere, switchFor, switchState, templateOf } =
   await import("./draft.ts");
 const { sendUpdate } = await import("./scene.ts");
 
@@ -101,7 +101,7 @@ describe("a scene applied as pending edits", () => {
     const here = withPools(room(shader(13, { pool: "pa", muted: true }), shader(12), shader(11), base), pools);
     drafts.patchShader("rclamp-13", { muted: true, params: { speed: { "2": 9 } } });
     drafts.patchShader("rclamp-11", { muted: false, params: { speed: { "1": 1 } }, mask: [5] });
-    drafts.applyScene({ name: "S", shaders: { "rclamp-13": { speed: { "1": 5 } } }, by: { id: "u", name: "U" }, at: 0 }, here);
+    drafts.applyScene({ name: "S", shaders: { "rclamp-13": { speed: { "1": 5 } } }, by: { id: "u", name: "U" }, at: 0 }, here, [1, 2, 3, 4, 5]);
     expect(currentDraft().edits).toEqual({
       // On, with the scene's knobs (light 1 to 5): what was pending for its knobs gives way.
       "rclamp-13": { muted: false, params: { speed: { "1": 5 } } },
@@ -109,6 +109,16 @@ describe("a scene applied as pending edits", () => {
       // Off; its pending knobs and mask stay.
       "rclamp-11": { muted: true, params: { speed: { "1": 1 } }, mask: [5] },
     });
+  });
+});
+
+describe("a scene applied to sketches from vibes", () => {
+  it("switches them by their masks: off every light, or on all of the home (unmuted, if muted from before), in place of a pending mask", () => {
+    const sketch = (key: string, extra: Partial<SceneShader>) => shader(0, { key, name: key, instance: { ...instance, id: key, home: [1, 2] }, ...extra });
+    const here = room(sketch("on", { mask: [3] }), sketch("off", { muted: true, mask: [] }));
+    drafts.patchShader("on", { mask: [1, 3] });
+    drafts.applyScene({ name: "S", shaders: { off: {} }, by: { id: "u", name: "U" }, at: 0 }, here, [1, 2, 3]);
+    expect(currentDraft().edits).toEqual({ on: { mask: [1, 2, 3] }, off: { muted: false, mask: [3] } });
   });
 });
 
@@ -612,24 +622,41 @@ describe("switching a shader on and off", () => {
     expect(switchState({ ...homed(), muted: true }, [1])).toBe("off");
   });
 
-  it("switches only lights in its home", () => {
+  it("switches lights in its home", () => {
     expect(switchFor(homed(), [1, 4], false, ALL)).toEqual({ mask: [1, 4, 5, 6] });
-    expect(switchFor({ ...homed(), mask: [1, 2, 4, 5, 6] }, [2, 6], true, ALL)).toEqual({ mask: [1, 4, 5, 6] });
+    expect(switchFor({ ...homed(), mask: [1, 2, 4, 5, 6] }, [2], true, ALL)).toEqual({ mask: [1, 4, 5, 6] });
   });
 
-  it("is off, muted, once it's off on everything it's about", () => {
-    expect(switchFor(homed(), [1, 2, 3], false, ALL)).toEqual({ muted: true });
-    expect(switchFor({ ...other(), mask: [1] }, [2], false, ALL)).toEqual({ muted: true });
+  it("is off on everything by its mask alone, never muted", () => {
+    expect(switchFor(homed(), [1, 2, 3], false, ALL)).toEqual({ mask: [1, 2, 3, 4, 5, 6] });
+  });
+
+  it("switched on for lights outside its home, takes them into it", () => {
+    expect(switchFor({ ...homed(), mask: [1, 2, 4, 5, 6] }, [2, 6], true, ALL)).toEqual({ mask: [1, 4, 5], home: [1, 2, 3, 6] });
+    expect(switchFor({ ...homed(), muted: true }, [3, 4], true, ALL)).toEqual({ muted: false, mask: [1, 2, 5, 6], home: [1, 2, 3, 4] });
+  });
+
+  it("put in some other way, is only muted or not", () => {
+    expect(muteFor(false)).toEqual({ muted: true });
+    expect(muteFor(true)).toEqual({ muted: false });
+  });
+
+  it("against a selection, counts the lights it's on", () => {
+    expect(selectionSwitch(homed(), [1, 2])).toEqual({ state: "on", on: 2, of: 2 });
+    expect(selectionSwitch(homed(), [2, 5])).toEqual({ state: "mixed", on: 1, of: 2 });
+    expect(selectionSwitch(homed(), [5])).toEqual({ state: "off", on: 0, of: 1 });
+    expect(selectionSwitch(other(), [5])).toEqual({ state: "on", on: 1, of: 1 });
+    expect(selectionSwitch({ ...other(), mask: [5] }, [4, 5])).toEqual({ state: "mixed", on: 1, of: 2 });
   });
 
   it("switched on while muted, is on for just these lights", () => {
     expect(switchFor({ ...homed(), muted: true }, [2], true, ALL)).toEqual({ muted: false, mask: [1, 3, 4, 5, 6] });
   });
 
-  it("on everywhere is all of its home", () => {
+  it("on everywhere is all of its home (unmuted, if it's muted from before); off everywhere, masked off every light", () => {
     expect(switchEverywhere({ ...homed(), muted: true, mask: [1, 4, 5, 6] }, true, ALL)).toEqual({ muted: false, mask: [4, 5, 6] });
-    expect(switchEverywhere(other(), true, ALL)).toEqual({ muted: false, mask: [] });
-    expect(switchEverywhere(other(), false, ALL)).toEqual({ muted: true });
+    expect(switchEverywhere({ ...homed(), mask: [1, 2, 3, 4, 5, 6] }, true, ALL)).toEqual({ mask: [4, 5, 6] });
+    expect(switchEverywhere(homed(), false, ALL)).toEqual({ mask: [1, 2, 3, 4, 5, 6] });
   });
 });
 

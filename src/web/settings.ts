@@ -45,6 +45,8 @@ try {
 }
 // The map's light worked out a pixel at a time (lighting-exact.ts), while it's tried out.
 export const [setExactLight, useExactLight] = flag("vibes.exactLight");
+// Show mode: the scenes drawer along the map's bottom (ScenesDrawer.tsx), and starting a show from it. Off to start with.
+export const [setShowMode, useShowMode] = flag("vibes.showMode");
 // What the selection looks like (ColorPreview), folded away in the map's top right.
 export const [setPreviewFolded, usePreviewFolded] = flag("vibes.previewFolded");
 

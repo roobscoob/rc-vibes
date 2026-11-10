@@ -1,46 +1,67 @@
 // The layers in the room (its shaders), in a panel along the left of the
-// map: the bottom of the stack first, as the selection's rows read (each
-// draws over what's above it), dragged by their grips to reorder the
-// stack, on the same rail as the selection's: a stop each, in the light it
-// makes on its lights (hollow while it's off, or not in yet). Last on the
-// rail, the library (AddSketch.tsx): adding another, on the lights selected
-// (every light, with none). The
-// library also opens from the code button in the panel's head.
+// map: where you say which lights each one is on. The bottom of the stack
+// first, as the selection's rows read (each draws over what's above it), on
+// the same rail as the selection's: a stop each, in the light it makes on its
+// lights (hollow while it's off, or not in yet). Last on the rail, the
+// library (AddSketch.tsx): adding another, on the lights selected (every
+// light, with none). The library also opens from the code button in the
+// panel's head.
 //
-// Under its name, how many lights it's on; after it, with
-// changes to it not saved yet, its own pink asterisk (as the selection's
-// title has for the whole room's), which selects the lights they change on
-// this floor. Clicking a layer
-// selects the lights it's on (on this floor; shift adds them, or, all of
-// them selected already, lets go of them; alt lets go of them, or, none of
-// them selected, adds them), or, on none
-// here, lets go of the selection, and does nothing else (the map stays put);
-// under the pointer, its lights are ringed, dashed, on the map (hint.ts, as
-// its asterisk's are). Every row is open, always: under it, the lights it's
-// on, each kind on a line in their colors (LightsSummary.tsx, as the map's
-// tooltip says them), and what can be done to it: opening its
-// code, editing its domain on the map (layer-mode.ts: the map becomes a shader
-// selector), cloning it, updating it, and deleting it (or keeping it, once
-// it's going).
+// Each row is shut to start with: its name, and under it the lights it's on
+// now (your pending edits and all) in a few words (domain-words.ts:
+// "Couches, Dave, and 3 more lights"; off, "No lights"; made outside vibes,
+// which vibes can't say what it's meant for, "External"). Clicking
+// its head selects the lights it's on (on this floor; shift adds them, alt
+// lets go of them); under the pointer, they're ringed on the map (hint.ts).
+// Then its switch (Off · On), and its chevron: clicked, it opens and shuts
+// the row; dragged, it moves the shader in the stack. Opened: its lights,
+// each kind on a line in their colors (LightsSummary.tsx), and what can be
+// done to it: opening its code, cloning it, updating it, and deleting it (or
+// keeping it, once it's going).
+//
+// The switch is about whatever's selected (of the lights shaders can light:
+// not the old bulbs). With nothing selected, it's the shader's own: Off
+// mutes it, keeping which lights it's on for when it's back. With some
+// selected, it's about them; while it's on for some of them, both sides are
+// lit, with how many of them each is ("12 off · 5 on"): On is on for all
+// of them, taking any outside its home in, and Off is off for all of them.
 
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type MouseEvent } from "react";
 import type { LightInfo } from "../../shared/arclamp.ts";
-import { layerMode, useLayerMode } from "../layer-mode.ts";
 import { queryClient, request, useBranchHead, useSketchChanges, useStatus } from "../api.ts";
 import { invalidateScene } from "../scene.ts";
 import { focusLayer } from "../focus.ts";
 import { useStuckHeads } from "../stuck.ts";
-import { changeable, changesByLayer, domainOf, drafts, layerOf, layersOf, removedOf, reorderWithin, useDraft, type Layer } from "../draft.ts";
-import { CodeIcon, DomainIcon, FocusIcon, GripIcon, PlusIcon } from "../icons.tsx";
+import {
+  changeable,
+  changesByLayer,
+  drafts,
+  layerOf,
+  layersOf,
+  removedOf,
+  reorderWithin,
+  onFor,
+  muteFor,
+  selectionSwitch,
+  switchEverywhere,
+  switchFor,
+  useDraft,
+  type Layer,
+  type ShaderPatch,
+  type SwitchState,
+} from "../draft.ts";
+import { domainWords, shadeable } from "../domain-words.ts";
+import { ChevronUpIcon, CodeIcon, PlusIcon } from "../icons.tsx";
 import { useLights, useScene, type Scene } from "../scene.ts";
 import { isBaseColor } from "../../shared/base-color.ts";
 import { defaultSketch } from "../../shared/default-sketches.ts";
-import { count } from "../words.ts";
 import { AddSketch } from "./AddSketch.tsx";
 import { reorderAnnouncements, reorderInstructions } from "./layer-announcements.ts";
+import { Reveal } from "./Reveal.tsx";
+import { Segmented } from "./Segmented.tsx";
 import { Sidebar, SidebarDetails, SidebarSection } from "./Sidebar.tsx";
 import { LightsSummary } from "./LightsSummary.tsx";
 import { AddingActions, CloneShader, ComingActions, OpenCode, refocusRow, RemoveShader } from "./ShaderPanel.tsx";
@@ -48,6 +69,7 @@ import { keyedMode, type SelectMode } from "../selection.ts";
 import { ChangesMark, inPreview, ShaderNode, withGoing } from "./SelectionPanel.tsx";
 import { useShowUnsaved } from "../unsaved.ts";
 import { usePointsOut } from "../hint.ts";
+import { useOpened } from "../opened.ts";
 
 const NO_SCENE: Scene = { shaders: [], roomtone: null, pools: {} };
 const NO_CHANGES: ReadonlyMap<string, number[]> = new Map();
@@ -59,7 +81,6 @@ interface Props {
   selected: ReadonlySet<number>;
   onSelect: (ids: number[], mode: SelectMode) => void;
 }
-
 
 export function ShadersPanel({ here, selected, onSelect }: Props) {
   const scene = useScene();
@@ -76,40 +97,44 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
     live,
   ).reverse();
   const all = lights.data?.lights ?? [];
+  const everyId = all.map((l) => l.id);
   // What each layer has that isn't saved yet: the lights it changes.
   // Not in live mode, where they're sent as they're made (unsaved.ts).
   const showUnsaved = useShowUnsaved();
   const changes = showUnsaved ? changesByLayer(live, draft) : NO_CHANGES;
-  // The layer the map's about (in focus, or its domain being edited): its row says so.
-  const mode = useLayerMode();
+  const opened = useOpened();
   const body = useRef<HTMLDivElement>(null);
   useStuckHeads(body);
+  // The switches are about the selection (the lights shaders can light), if there is one; with none, about each shader.
+  const capable = here.filter(shadeable);
+  const chosen = capable.filter((l) => selected.has(l.id)).map((l) => l.id);
+  const scope = chosen.length > 0 ? chosen : null;
 
   // Adding one: on the lights selected (here), if any are, its home and all
   // it lights, masked off the rest; else on every light in the room. From
-  // main, for now: there's no picking a branch yet. Widen or narrow it
-  // afterwards by editing its domain.
+  // main, for now: there's no picking a branch yet.
   const [picking, setPicking] = useState(false);
   const add = (sketch: { id: string; name: string }) => {
     setPicking(false);
-    const every = all.map((l) => l.id);
-    const home = selected.size > 0 ? [...selected].sort((a, b) => a - b) : every;
+    const home = selected.size > 0 ? [...selected].sort((a, b) => a - b) : everyId;
     const inHome = new Set(home);
     drafts.add({
       sketchId: sketch.id,
       sketchName: sketch.name,
       branch: "main",
       home,
-      mask: every.filter((id) => !inHome.has(id)),
+      mask: everyId.filter((id) => !inHome.has(id)),
     });
   };
   const sketches = status.data?.sketches === true;
 
-  // Dragging a sketch by its grip moves it in the stack (the room's order, for every light).
+  // Dragging a sketch by its chevron moves it in the stack (the room's order, for every light).
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    // By keyboard, Space picks it up to move (Enter, as a click, opens and shuts it).
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] },
     }),
   );
   // The base Tone stays at the bottom (shared/base-color.ts): it's no place among them to move to.
@@ -160,17 +185,21 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
                 here,
                 all,
                 scene: live,
-                editing: mode?.kind === "edit" && mode.key === layer.key,
-                active: mode?.key === layer.key,
+                scope,
+                open: opened.isOpen(layer.key),
+                onToggle: () => opened.toggle(layer.key),
                 onPick: (mode) => {
                   // The selection panel shuts every row but this one's.
                   focusLayer(layer.key);
-                  const onFloor = new Set(here.map((l) => l.id));
-                  const mine = domainOf(layer).filter((id) => onFloor.has(id));
+                  const mine = litOf(
+                    layer,
+                    here.map((l) => l.id),
+                  );
                   // Shift adds them (or, all selected already, lets go of them); alt always lets go of them: keyedMode.
                   if (mine.length > 0) onSelect(mine, mode === "add" || mode === "remove" ? keyedMode(mode, mine, selected) : mode);
                   else if (mode === "replace") onSelect([], "replace");
                 },
+                onSwitch: (patch) => drafts.patchShader(layer.key, patch),
                 onSelect,
               };
               return listed.includes(layer.key) ? <SortableShaderRow key={layer.key} {...props} /> : <ShaderRow key={layer.key} {...props} />;
@@ -205,15 +234,17 @@ interface RowProps {
   here: LightInfo[];
   all: LightInfo[];
   scene: Scene;
-  /** Its domain's being edited on the map. */
-  editing: boolean;
-  /** The map's about it: in focus, or its domain being edited. */
-  active: boolean;
-  /** Its row clicked: its lights on this floor selected (shift: added; alt: taken out), or, with none here, nothing selected. */
+  /** The selected lights its switch is about; null, it's about the whole shader. */
+  scope: readonly number[] | null;
+  open: boolean;
+  onToggle: () => void;
+  /** Its head clicked: its lights on this floor selected (shift: added; alt: taken out), or, with none here, nothing selected. */
   onPick: (mode: SelectMode) => void;
+  /** Its switch pressed: the edit that makes. */
+  onSwitch: (patch: ShaderPatch) => void;
   /** Lights selected from its asterisk. */
   onSelect: (ids: number[], mode: SelectMode) => void;
-  /** Moving it: its grip is the handle to drag it by (useSortable's), and how it's carried. */
+  /** Moving it: its chevron is the handle to drag it by (useSortable's), and how it's carried. */
   drag?: {
     handle: ButtonHTMLAttributes<HTMLButtonElement>;
     ref: (el: HTMLElement | null) => void;
@@ -222,14 +253,11 @@ interface RowProps {
   };
 }
 
-/** A sketch that can be moved: dragged by its grip to another place in the stack. */
+/** A sketch that can be moved: dragged by its chevron to another place in the stack. */
 function SortableShaderRow(props: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.layer.key });
   const drag = {
-    handle: {
-      ...attributes,
-      ...listeners,
-    } as ButtonHTMLAttributes<HTMLButtonElement>,
+    handle: { ...attributes, ...listeners } as ButtonHTMLAttributes<HTMLButtonElement>,
     ref: setNodeRef,
     // Up and down only (the stack's one way), and never stretched to the size of the row it's over.
     style: { transform: CSS.Translate.toString(transform && { ...transform, x: 0 }), transition },
@@ -238,62 +266,149 @@ function SortableShaderRow(props: RowProps) {
   return <ShaderRow {...props} drag={drag} />;
 }
 
-function ShaderRow({ layer, going, changed, here, all, scene, editing, active, onPick, onSelect, drag }: RowProps) {
-  const on = domainOf(layer);
-  // Under the pointer, its lights pointed out on the map.
-  const pointsOut = usePointsOut(() => domainOf(layer));
+/** The lights a shader's switched on for (onFor), of these. */
+const litOf = (layer: Layer, ids: readonly number[]) => ids.filter(onFor(layer));
+
+/**
+ * A sketch's switch, as LayerSwitch shows it, and the edit switching it on
+ * or off makes (its mask: draft.ts' switchFor): about the selection (scope),
+ * or with none, the whole sketch: off masks it off every light, on puts it
+ * on all of its home.
+ */
+function switchOf(
+  layer: Layer,
+  scope: readonly number[] | null,
+  every: readonly number[],
+): { state: SwitchState; on: number; off: number; press: (on: boolean) => ShaderPatch } {
+  if (scope) {
+    const s = selectionSwitch(layer, scope);
+    return { state: s.state, on: s.on, off: s.of - s.on, press: (on) => switchFor(layer, scope, on, every) };
+  }
+  const lit = litOf(layer, every).length;
+  return { state: lit > 0 ? "on" : "off", on: lit, off: 0, press: (on) => switchEverywhere(layer, on, every) };
+}
+
+function ShaderRow({ layer, going, changed, here, all, scene, scope, open, onToggle, onPick, onSwitch, onSelect, drag }: RowProps) {
+  const every = all.map((l) => l.id);
+  // Made outside vibes: no lights of its own (no home) to switch, just muted or not; nothing about its lights here.
+  const external = !layer.instance && !layer.adding;
+  // The lights it's on: none for one made outside vibes, which says nothing of its lights.
+  const on = external ? [] : litOf(layer, every);
+  const switchable = changeable(layer) && !going;
+  const sw = switchable && !external ? switchOf(layer, scope, every) : null;
+  // Under the pointer, its lights pointed out on the map; clicked, selected (not one made outside vibes).
+  const pointsOut = usePointsOut(() => on);
   const pick = (e: MouseEvent) => onPick(e.altKey ? "remove" : e.shiftKey ? "add" : "replace");
+  const off = external ? layer.muted : on.length === 0;
   return (
     <li
       ref={drag?.ref}
       style={drag?.style}
-      className={["layer shader-row open", going && "going", layer.muted && "off", active && "active", drag?.dragging && "dragging"]
-        .filter(Boolean)
-        .join(" ")}
+      className={["layer shader-row", open && "open", going && "going", off && "off", drag?.dragging && "dragging"].filter(Boolean).join(" ")}
     >
       <div className="layer-rail">
-        <ShaderNode layer={layer} lights={all} hollow={on.length === 0 || going || !inPreview(layer)} />
+        <ShaderNode layer={layer} lights={all} hollow={off || going || !inPreview(layer)} />
       </div>
-      {/* All of its head picks it, but its own buttons; by keyboard, its name, the button for it. */}
+      {/* All of its head selects its lights, but its own buttons; by keyboard, its name, the button for it. One made outside vibes has no lights to select. */}
       <div
-        className="layer-head toggle"
-        onClick={(e: MouseEvent) => !(e.target as Element).closest("button") && pick(e)}
-        {...pointsOut}
+        className={external ? "layer-head" : "layer-head toggle"}
+        onClick={external ? undefined : (e) => !(e.target as Element).closest("button, [role=radiogroup]") && pick(e)}
+        {...(external ? {} : pointsOut)}
       >
         <span className="layer-text">
           <span className="layer-name" title={layer.name}>
-            <button className="layer-name-button" aria-label={`${layer.name}, select its lights`} onClick={pick}>
-              {layer.name}
-            </button>
+            {external ? (
+              <span className="layer-name-text">{layer.name}</span>
+            ) : (
+              <button className="layer-name-button" aria-label={`${layer.name}, select its lights`} onClick={pick}>
+                {layer.name}
+              </button>
+            )}
             {changed && <ChangesMark changed={changed} here={here} onSelect={onSelect} />}
           </span>
-          <span className="layer-meta">{count(on.length, "light")}</span>
+          <span className="layer-meta">{external ? "External" : on.length === 0 ? "No lights" : domainWords(on, all)}</span>
         </span>
-        {/* The map's about it: which way, by its button's icon, filled as the button is while it's on, just before its grip.
-            Pressed, it's off: the edit discarded (as the pill's × does, back to focus if it came from there), or the focus let go of. */}
-        {active && (
-          <button
-            className="layer-mode-icon"
-            aria-label={editing ? "Stop editing its domain" : "Exit focus"}
-            onClick={() => (editing ? layerMode.endEdit() : layerMode.exit())}
-          >
-            {editing ? <DomainIcon /> : <FocusIcon />}
-          </button>
+        {switchable && external && <MuteSwitch name={layer.name} muted={layer.muted} onSwitch={(to) => onSwitch(muteFor(to))} />}
+        {sw && (
+          <LayerSwitch
+            name={layer.name}
+            state={sw.state}
+            on={sw.on}
+            off={sw.off}
+            scoped={scope !== null}
+            onSwitch={(to) => onSwitch(sw.press(to))}
+          />
         )}
-        {/* Its handle, to drag it to another place in the stack; one that can't move keeps the room, so rows line up. */}
-        {drag ? (
-          <button className="layer-chevron layer-handle" {...drag.handle} aria-label={`Move ${layer.name} (drag)`}>
-            <GripIcon />
-          </button>
-        ) : (
-          <span className="layer-chevron layer-end" aria-hidden="true" />
-        )}
+        {/* Clicked, it opens and shuts the row; dragged (one that can move), it moves it in the stack. */}
+        <button
+          className={drag ? "layer-chevron layer-handle" : "layer-chevron"}
+          {...drag?.handle}
+          aria-expanded={open}
+          aria-label={open ? `Close ${layer.name}` : `Open ${layer.name}`}
+          onClick={onToggle}
+        >
+          <ChevronUpIcon />
+        </button>
       </div>
-      {/* Always open: what can be done to it, under its row. */}
-      <SidebarDetails>
-        <Sections layer={layer} on={on} going={going} scene={scene} all={all} editing={editing} />
-      </SidebarDetails>
+      <Reveal open={open}>
+        <SidebarDetails>
+          <Sections layer={layer} on={on} going={going} scene={scene} all={all} />
+        </SidebarDetails>
+      </Reveal>
     </li>
+  );
+}
+
+/**
+ * Whether a shader's on, as Off · On (the old bulbs' switch, Field.tsx's):
+ * for the selection, or with none, at all. On for some of the selected
+ * lights, its highlight stretches over both sides, each with how many lights it is ("12 off ·
+ * 5 on"); either sets all of them.
+ */
+function LayerSwitch({
+  name,
+  state,
+  on,
+  off,
+  scoped,
+  onSwitch,
+}: {
+  name: string;
+  state: SwitchState;
+  on: number;
+  off: number;
+  scoped: boolean;
+  onSwitch: (on: boolean) => void;
+}) {
+  const mixed = state === "mixed";
+  return (
+    <Segmented
+      className={mixed ? "layer-switch mixed" : "layer-switch"}
+      all={mixed}
+      label={scoped ? `${name}, on the selected lights` : name}
+      options={[
+        { value: "off", label: mixed ? `${off} off` : "Off" },
+        { value: "on", label: mixed ? `${on} on` : "On" },
+      ]}
+      value={mixed ? null : state}
+      onChange={(v) => onSwitch(v === "on")}
+    />
+  );
+}
+
+/** One made outside vibes, muted or not (the only way it goes on and off): Mute · Unmute. */
+function MuteSwitch({ name, muted, onSwitch }: { name: string; muted: boolean; onSwitch: (on: boolean) => void }) {
+  return (
+    <Segmented
+      className="layer-switch"
+      label={name}
+      options={[
+        { value: "mute", label: "Mute" },
+        { value: "unmute", label: "Unmute" },
+      ]}
+      value={muted ? "mute" : "unmute"}
+      onChange={(v) => onSwitch(v === "unmute")}
+    />
   );
 }
 
@@ -316,17 +431,6 @@ function SketchCommit({ layer }: { layer: Layer }) {
   // An instance knows its branch's head; one you're adding (or any other), the sketch's main as last fetched.
   const head = layer.instance ? layer.instance.head : latest;
   return <span className="mono">{head === commit ? "head" : commit.slice(0, 7)}</span>;
-}
-
-/** A layer's lights alone on the map (layer-mode.ts), lit while they are; pressed again, every light back. */
-function FocusLayer({ layer }: { layer: Layer }) {
-  const mode = useLayerMode();
-  const on = mode?.kind === "focus" && mode.key === layer.key;
-  return (
-    <button className={on ? "quiet shader-action layer-focus on" : "quiet shader-action layer-focus"} aria-pressed={on} onClick={() => layerMode.focus(on ? null : layer.key)}>
-      <FocusIcon /> Focus
-    </button>
-  );
 }
 
 /**
@@ -378,43 +482,16 @@ function NewChanges({ layer }: { layer: Layer }) {
   );
 }
 
-/** Editing a layer's domain on the map (layer-mode.ts), lit while it is; pressed again, done. */
-function EditDomain({ layer, editing }: { layer: Layer; editing: boolean }) {
-  return (
-    <button
-      className={editing ? "quiet shader-action domain-edit on" : "quiet shader-action domain-edit"}
-      aria-pressed={editing}
-      onClick={() => (editing ? layerMode.endEdit() : layerMode.edit(layer.key, domainOf(layer)))}
-    >
-      <DomainIcon /> Edit
-    </button>
-  );
-}
 
 /**
- * What a layer opens to: its Domain (the lights it's on, editing them on
- * the map on the right of its title), then, if it's a sketch's, its Sketch (opening it, cloning
- * it, updating it, and deleting it). The base Tone is vibes' own: it has no Sketch
- * section (just a note that it's always there), and can't be deleted or
- * moved; a shader made outside vibes has none either,
- * its Delete beside its Focus and Edit. One
- * you're taking out can only be kept; one on its way in, opened or let go.
+ * What a layer opens to: its Domain (the lights it's on), then, if it's a
+ * sketch's, its Sketch (opening it, cloning it, updating it, and deleting
+ * it). The base Tone is vibes' own: it has no Sketch section, and can't be
+ * deleted or moved. A shader made outside vibes has no Domain (vibes doesn't
+ * say which lights it's on), just its Delete. One you're taking out can
+ * only be kept; one on its way in, opened or let go.
  */
-function Sections({
-  layer,
-  on,
-  going,
-  scene,
-  all,
-  editing,
-}: {
-  layer: Layer;
-  on: number[];
-  going: boolean;
-  scene: Scene;
-  all: LightInfo[];
-  editing: boolean;
-}) {
+function Sections({ layer, on, going, scene, all }: { layer: Layer; on: number[]; going: boolean; scene: Scene; all: LightInfo[] }) {
   const ids = all.map((l) => l.id);
   if (going) {
     return (
@@ -428,24 +505,24 @@ function Sections({
   }
   const coming = (layer.stage === "building" || layer.stage === "failed") && layer.instance;
   // One of vibes' own (shared/default-sketches.ts: a Tone, a Transition): its code's vibes', so nothing to open or update, just clone or take out.
-  // The base Tone's always in and at the bottom: the layers panel won't take it out (or move it).
   const base = isBaseColor(layer.key);
   const builtIn = defaultSketch(layer.adding?.sketchId ?? layer.instance?.sketchId ?? layer.sketch?.id);
   // A sketch's (in the room, on its way, or being added): it has a Sketch section. One of vibes' own, or a shader made outside vibes, hasn't.
   const isSketch = !builtIn && (layer.sketch !== null || layer.adding !== null || coming);
-  // One made outside vibes can still be deleted: with no Sketch section, beside its Focus and Edit.
-  const outside = !isSketch && !builtIn;
+  const outside = !isSketch && !builtIn && !layer.instance;
+  if (outside) {
+    return (
+      <SidebarSection title="External" subtitle={`Made outside vibes${layer.by ? `, by ${layer.by}` : ""}: it's only muted or not.`}>
+        <div className="shader-actions">
+          <RemoveShader layer={layer} />
+        </div>
+      </SidebarSection>
+    );
+  }
   return (
     <>
-      {/* Above its Domain, the map about it: Focus and Edit, side by side, the whole width between them
-          (and, for one made outside vibes, with nothing else to do to it, its Delete at the end). */}
-      <div className="layer-modes">
-        <FocusLayer layer={layer} />
-        {changeable(layer) && <EditDomain layer={layer} editing={editing} />}
-        {outside && <RemoveShader layer={layer} />}
-      </div>
       <SidebarSection title="Domain">
-        {on.length > 0 ? <LightsSummary lights={lightsOf(on, all)} /> : <span className="domain-empty">No domain</span>}
+        {on.length > 0 ? <LightsSummary lights={lightsOf(on, all)} /> : <span className="domain-empty">No lights</span>}
       </SidebarSection>
       {/* One of vibes' own sketches: its own section, by its name (cloning it, taking it out). Not the base Tone's, which is just its Domain. */}
       {builtIn && !base && (

@@ -146,8 +146,6 @@ interface Props {
   hinted?: ReadonlySet<number>;
   /** Selected lights what's pointed out from a panel would let go of, if it were clicked: about to be let go of. */
   leaving?: ReadonlySet<number>;
-  /** Your own rings' color: a warm white, or (editing a domain, or a layer in focus) the focus blue. */
-  mine?: Rgb;
   /** What the selection looks like: a card in the map's bottom right, beside the zoom, while its button there is on. */
   look?: ReactNode;
   /** Open streetview from a camera (the figure dropped on it); without it, there's no figure. */
@@ -223,11 +221,12 @@ export function RoomMap({
   others = NO_OTHERS,
   hinted = NO_HINTED,
   leaving = NO_HINTED,
-  mine = MINE,
   look,
   onStreetView,
   streetView = null,
 }: Props) {
+  // Your own rings' color.
+  const mine = MINE;
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const planEl = useRef<HTMLDivElement>(null);

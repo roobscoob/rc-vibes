@@ -100,6 +100,11 @@ beforeEach(() => {
       calls.push(`mask ${id} ${mask.join(",")}`);
       shaders.set(id, { ...shaders.get(id)!, mask });
     },
+    setMaskAt: async (id: number, mask: number[], schedule: { at: number }) => {
+      calls.push(`mask ${id} ${mask.join(",")} at ${schedule.at}`);
+      shaders.set(id, { ...shaders.get(id)!, mask });
+      return null;
+    },
     deleteShader: async (id: number) => void shaders.delete(id),
     scene: async () => [...shaders.values()],
     setMuted: async (id: number, muted: boolean) => {

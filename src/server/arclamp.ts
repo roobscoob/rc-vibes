@@ -106,6 +106,12 @@ export function createArclamp(baseUrl: string, key: string) {
     },
     // The whole mask: the lights the shader may not change ([] clears it).
     setMask: (id: number, mask: number[]) => call<void>("POST", `/v1/shader/${id}/mask`, { mask }),
+    /** The whole mask, put off (Schedule): the frame it goes in with (arclamp's time, ms), or null if it went in at once. */
+    setMaskAt: async (id: number, mask: number[], schedule: Schedule): Promise<number | null> => {
+      const ack = await call<Scheduled | undefined>("POST", `/v1/shader/${id}/mask`, { mask }, schedule);
+      const frame = ack?.frame_at ? Date.parse(ack.frame_at.replace(/(\.\d{3})\d+/, "$1")) : Number.NaN;
+      return Number.isFinite(frame) ? frame : null;
+    },
     // A statement run in the shader's live sandbox, between ticks: what it
     // came to (JSON where JSON can say it; "undefined" for nothing), or what
     // it threw. arclamp logs each one, with its code.

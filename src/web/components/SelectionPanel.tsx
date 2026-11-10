@@ -7,14 +7,11 @@
 // head drags it between them, settling where it's let go. Its title says
 // how many lights are selected, beside a button that lets go of them all. Then what's on
 // these lights, as the room builds their light: Room Tone (arclamp's, in
-// admin view only), then each shader up the stack that's about any of them
-// (its home, or where its code's lit; the base Tone's home is every light, its
-// params opened under it to start with),
-// joined by a rail as the light builds up through them: in the room, on its
-// way in, or one you're adding. Each has a switch for whether it's on for
-// these lights and a handle to drag it to another place among them; both are
-// pending edits. (One that couldn't go in has neither.) What can be done to
-// a shader besides is in the shaders panel (ShadersPanel.tsx).
+// admin view only), then each shader up the stack that's on any of them (the
+// base Tone's params opened under it to start with), joined by a rail as the
+// light builds up through them: in the room, on its way in, or one you're
+// adding (or taking out). Which lights a shader's on, and everything else
+// done to it, is the layers panel's (ShadersPanel.tsx): here are its params.
 
 import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import type { Channels, LightInfo } from "../../shared/arclamp.ts";
@@ -30,14 +27,11 @@ import {
   drafts,
   layerOf,
   layersOf,
-  reachOf,
+  onFor,
   removedOf,
-  switchFor,
-  switchState,
   templateOf,
   useDraft,
   type Layer,
-  type SwitchState,
 } from "../draft.ts";
 import { ChevronUpIcon, CloseIcon, SaveIcon, UndoIcon } from "../icons.tsx";
 import { isRoomFrames, pipelineFrame, useFrames } from "../live.ts";
@@ -104,18 +98,14 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
   const unsaved = useShowUnsaved() && save.pending > 0;
   const chosen = here.filter((l) => selected.has(l.id));
 
-  // What's on these lights, bottom of the stack first: each shader whose
-  // home (or, with none, where its code has lit: reachOf) takes in any of
-  // them. A row only moves if you move it. Its switch is whether it's on for
-  // these lights.
+  // What's on these lights, bottom of the stack first: each shader on any of them
+  // (or, one you're taking out, that was).
   const scene = useScene();
   const lights = useLights();
   const draft = useDraft();
   const gamut = useGamut();
   const live = scene.data ?? NO_SCENE;
   const template = templateOf(live, draft);
-  const ids = chosen.map((l) => l.id);
-  const all = (lights.data?.lights ?? []).map((l) => l.id);
   const stack = layersOf(live, draft);
   // And the ones you're taking out (when you apply), where they are, to keep after all.
   const going = new Set(removedOf(live, draft));
@@ -124,11 +114,12 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     [...going].flatMap((key) => layerOf(live, draft, key) ?? []),
     live,
   );
-  const onThese = [...shown].reverse().filter((layer) => reachOf(layer).some((id) => selected.has(id)));
+  // Not one made outside vibes: it's only muted or not, with no lights (or params) of its own here.
+  const onThese = [...shown].reverse().filter((layer) => changeable(layer) && (layer.instance || layer.adding) && [...selected].some(onFor(layer)));
   // The room tone, the room's "normal", is admin view's to change; everyone's color is the base Tone's
   // (shared/base-color.ts: vibes' own shader at the bottom, on every light, always in).
   const admin = useAdminMode();
-  const rows: Row[] = onThese.map((layer) => ({ layer, state: switchState(layer, ids) }));
+
 
   // The layers whose parameters are open under them, any number at once: room tone's, to start with.
   const opened = useOpened(["roomtone"]);
@@ -141,8 +132,6 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     const base = shown.filter((l) => isBaseColor(l.key) && l.key !== key).map((l) => `closed:${l.key}`);
     opened.only([...base, key]);
   });
-  /** A shader switched off for these lights, or on: pending edits, like a mute. */
-  const setOn = (row: Row, on: boolean) => drafts.patchShader(row.layer.key, switchFor(row.layer, ids, on, all));
 
   const title = `${count(chosen.length, "light")} selected`;
   const toneToggle = toggling(opened.isOpen("roomtone"), () => opened.toggle("roomtone"));
@@ -315,21 +304,18 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
               </Reveal>
             </li>
             )}
-            {rows.map((row) =>
-              going.has(row.layer.key) ? (
-                <GoingRow key={row.layer.key} layer={row.layer} />
-              ) : changeable(row.layer) ? (
-                <ShaderRow
-                  key={row.layer.key}
-                  row={row}
-                  lights={chosen}
-                  onSwitch={(on) => setOn(row, on)}
-                  details={detailsOf(row.layer, chosen)}
-                  opened={isOpen(row.layer)}
-                  onToggle={() => toggle(row.layer)}
-                />
+            {onThese.map((layer) =>
+              going.has(layer.key) ? (
+                <GoingRow key={layer.key} layer={layer} />
               ) : (
-                <FailedRow key={row.layer.key} layer={row.layer} />
+                <ShaderRow
+                  key={layer.key}
+                  layer={layer}
+                  lights={chosen}
+                  details={detailsOf(layer, chosen)}
+                  opened={isOpen(layer)}
+                  onToggle={() => toggle(layer)}
+                />
               ),
             )}
       </ol>
@@ -592,19 +578,10 @@ export function ShaderNode({ layer, lights, hollow }: { layer: Layer; lights: Li
  */
 export const inPreview = (layer: Layer) => layer.stage === "live" || (layer.stage === "adding" && layer.script !== "");
 
-/** A shader as the selection sees it. */
-interface Row {
-  layer: Layer;
-  /** Its switch: on for these lights, off, or on for some of them. */
-  state: SwitchState;
-}
-
 interface RowProps {
-  row: Row;
+  layer: Layer;
   /** The selected lights, for its stop's color. */
   lights: LightInfo[];
-  /** Its switch, for these lights. */
-  onSwitch: (on: boolean) => void;
   /** What it shows under its row when that's opened (detailsOf), if anything. */
   details: ReactNode | null;
   opened: boolean;
@@ -657,18 +634,18 @@ const Chevron = () => (
  * own things); one with nothing to show doesn't, and doesn't light up.
  */
 function ShaderRow(props: RowProps) {
-  const { row, lights, details, opened, onToggle } = props;
+  const { layer, lights, details, opened, onToggle } = props;
   const expandable = details !== null;
   const open = opened && expandable;
   // Not in the room yet: on its way in, or yours to add (previewed once it's built).
-  const { stage, adding } = row.layer;
+  const { stage, adding } = layer;
   const coming = stage === "live" ? "" : stage === "adding" ? (adding?.build?.state === "built" ? " coming adding built" : " coming adding") : " coming";
   const toggle = expandable ? toggling(open, onToggle) : null;
   const head = <RowParts {...props} name={toggle?.name} />;
   return (
-    <li className={`layer${coming}${row.state === "off" ? " off" : ""}${open ? " open" : ""}`}>
+    <li className={`layer${coming}${open ? " open" : ""}`}>
       <div className="layer-rail">
-        <ShaderNode layer={row.layer} lights={lights} hollow={row.state === "off" || !inPreview(row.layer)} />
+        <ShaderNode layer={layer} lights={lights} hollow={!inPreview(layer)} />
       </div>
       {expandable ? (
         <div className="layer-head toggle" {...toggle!.head}>
@@ -687,15 +664,12 @@ function ShaderRow(props: RowProps) {
 }
 
 /**
- * A shader's stop on the rail: its name, what's become of it, a switch for
- * whether it's on for these lights (off here leaves the rest of the room as
- * it is; on, for one that's off everywhere, is on for just these), and, at
- * the end, under room tone's chevron, a toggle for what it shows under its
- * row, or, if it shows nothing, the quiet dot in its place, so every row
- * ends in the same column.
+ * A shader's stop on the rail: its name, what's become of it, and, at the
+ * end, under room tone's chevron, a toggle for what it shows under its row,
+ * or, if it shows nothing, the quiet dot in its place, so every row ends in
+ * the same column.
  */
-function RowParts({ row, lights, onSwitch, details, name }: RowProps & { name?: HTMLAttributes<HTMLSpanElement> }) {
-  const { layer, state } = row;
+function RowParts({ layer, lights, details, name }: RowProps & { name?: HTMLAttributes<HTMLSpanElement> }) {
   const sketch = layer.sketch;
   // Its params on these lights, if any aren't at their default: one link puts them all back, under its name.
   const changed = offDefault(layer, paramRowsOf(layer, lights));
@@ -717,41 +691,12 @@ function RowParts({ row, lights, onSwitch, details, name }: RowProps & { name?: 
           </span>
         )}
       </span>
-      <button
-        className={`switch ${state}`}
-        role="switch"
-        aria-checked={state === "on" ? true : state === "off" ? false : "mixed"}
-        aria-label={`${layer.name}, on these lights`}
-        onClick={() => onSwitch(state !== "on")}
-      >
-        <span className="switch-knob" />
-      </button>
       {details !== null ? (
         <Chevron />
       ) : (
         <span className="layer-chevron layer-end" aria-hidden="true" />
       )}
     </>
-  );
-}
-
-/** One that couldn't go in, homed on some of these lights, and why: nothing to switch or move (the shaders panel has what can be done). */
-function FailedRow({ layer }: { layer: Layer }) {
-  const { name } = layer;
-  return (
-    <li className="layer coming">
-      <div className="layer-rail">
-        <LayerNode colors={[]} hollow />
-      </div>
-      <div className="layer-head">
-        <span className="layer-text">
-          <span className="layer-name" title={name}>
-            {name}
-          </span>
-        </span>
-        <RowEnd />
-      </div>
-    </li>
   );
 }
 
@@ -791,11 +736,3 @@ export function withGoing(stack: Layer[], going: Layer[], scene: Scene): Layer[]
   }
   return all;
 }
-
-/** A row's end with no switch yet: room for one, then the quiet dot. */
-const RowEnd = () => (
-  <>
-    <span className="layer-no-switch" aria-hidden="true" />
-    <span className="layer-chevron layer-end" aria-hidden="true" />
-  </>
-);

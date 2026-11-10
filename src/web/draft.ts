@@ -6,6 +6,11 @@
 // shown over the copy, until vibes says it's made them. Each browser has its
 // own; others keep seeing the live room.
 //
+// On and off goes two ways (shared/scenes.ts: shaderOn): a sketch put in
+// from vibes by its mask alone (switchFor, switchEverywhere: off, it's
+// masked off every light, and never muted), one put in some other way by its
+// mute alone (muteFor).
+//
 // A draft records only what you changed, on top of whatever is live, so
 // changes others make meanwhile still show through: room tone, each shader's
 // mute, mask, home, params and place in the stack, the shaders taken out of it, and
@@ -201,34 +206,59 @@ export function switchState(layer: Layer, ids?: readonly number[]): SwitchState 
 }
 
 /**
- * A shader switched on or off for some lights (of the ones it can light: its
- * home's, for an instance), as a draft edit. Off on everything it's about is
- * off, so that's a mute, its mask left as it was; on, when it's muted, is on
- * for just these.
+ * Whether a shader's switched on for a light: not muted, and not masked off
+ * it; for an instance, only in its home (all it can light). One put in some
+ * other way has no home: its mask is all there is, so it's on wherever that
+ * lets it be (its code may still not draw there).
+ */
+export function onFor(layer: Layer): (id: number) => boolean {
+  if (layer.muted) return () => false;
+  const mask = new Set(layer.mask);
+  const home = layer.instance ? new Set(layer.instance.home) : null;
+  return (id) => !mask.has(id) && (!home || home.has(id));
+}
+
+/** A shader against a selection: how many of the lights it's switched on for, of how many. */
+export function selectionSwitch(layer: Layer, ids: readonly number[]): { state: SwitchState; on: number; of: number } {
+  const lit = onFor(layer);
+  const on = ids.filter(lit).length;
+  return { state: on === 0 ? "off" : on === ids.length ? "on" : "mixed", on, of: ids.length };
+}
+
+/**
+ * A sketch from vibes switched on or off for some lights, as a draft edit:
+ * just its mask (off on every light, it's masked off every light; never
+ * muted). On for lights outside its home takes them into its home (not the
+ * base Tone's, whose home is every light already). One muted from before is
+ * off everywhere: on, it's unmuted, on just these.
  */
 export function switchFor(layer: Layer, ids: readonly number[], on: boolean, all: readonly number[]): ShaderPatch {
-  const home = layer.instance ? new Set(layer.instance.home) : null;
-  const these = home ? ids.filter((id) => home.has(id)) : [...ids];
+  const these = [...ids];
   const mask = new Set(layer.mask);
   if (on) {
+    const home = layer.instance && !isBaseColor(layer.key) ? layer.instance.home : null;
+    const outside = home ? these.filter((id) => !home.includes(id)) : [];
+    const grown = outside.length > 0 ? { home: sortedIds([...home!, ...outside]) } : {};
     if (layer.muted) {
       const chosen = new Set(these);
-      return { muted: false, mask: sortedIds(all.filter((id) => !chosen.has(id))) };
+      return { muted: false, mask: sortedIds(all.filter((id) => !chosen.has(id))), ...grown };
     }
     for (const id of these) mask.delete(id);
-    return { mask: sortedIds(mask) };
+    return { mask: sortedIds(mask), ...grown };
   }
   for (const id of these) mask.add(id);
-  if (reachOf(layer).every((id) => mask.has(id))) return { muted: true };
   return { mask: sortedIds(mask) };
 }
 
-/** A shader on for everything it can light (all of its home, for an instance), or off. */
+/** A sketch from vibes on for all of its home (unmuted, if it's muted from before), or off: masked off every light. */
 export function switchEverywhere(layer: Layer, on: boolean, all: readonly number[]): ShaderPatch {
-  if (!on) return { muted: true };
-  const home = layer.instance ? new Set(layer.instance.home) : null;
-  return { muted: false, mask: home ? all.filter((id) => !home.has(id)) : [] };
+  if (!on) return { mask: sortedIds(all) };
+  const home = new Set(layer.instance?.home ?? all);
+  return { ...(layer.muted ? { muted: false } : {}), mask: all.filter((id) => !home.has(id)) };
 }
+
+/** A shader put in some other way, unmuted or muted: the only way it goes on and off. */
+export const muteFor = (on: boolean): ShaderPatch => ({ muted: !on });
 
 /** Whether two masks name the same lights. */
 export function sameMask(a: readonly number[], b: readonly number[]): boolean {
@@ -246,23 +276,6 @@ export function domainOf(layer: Layer): number[] {
   if (layer.muted) return [];
   const masked = new Set(layer.mask);
   return reachOf(layer).filter((id) => !masked.has(id));
-}
-
-/**
- * A shader on just these lights, as a draft edit: on none, it's muted (its
- * mask left as it was); otherwise unmuted and masked from every other light.
- * An instance (or a sketch being added) can only light its home, so lights
- * outside it are added to it; one put in some other way has no home, its
- * mask is all there is. The base Tone's home is every light, and nobody moves
- * it (vibes refuses to): just its mask, for it.
- */
-export function domainPatch(layer: Layer, ids: Iterable<number>, all: readonly number[]): ShaderPatch {
-  const on = new Set(ids);
-  if (on.size === 0) return { muted: true };
-  const mask = sortedIds(all.filter((id) => !on.has(id)));
-  const home = isBaseColor(layer.key) ? null : layer.instance?.home;
-  if (home && [...on].some((id) => !home.includes(id))) return { muted: false, mask, home: sortedIds([...home, ...on]) };
-  return { muted: false, mask };
 }
 
 /** The room tone template with the draft's values over the live one. */
@@ -590,23 +603,32 @@ export const drafts = {
   },
   /**
    * A scene applied (shared/scenes.ts), as pending edits over the live room:
-   * every shader's mute (but Base Color's), and the scene's sketch's knobs,
-   * each in place of whatever was pending for it; anything else pending
-   * stays. In live mode, sent as they're made, as any edit is.
+   * every shader (but Base Color) on or off, as it goes on and off (a
+   * sketch from vibes, its mask: on for its whole home, or off every light;
+   * any other, its mute), and the scene's sketch's knobs, each in place of
+   * whatever was pending for it; anything else pending stays. In live mode,
+   * sent as they're made, as any edit is. `all`: every light's id.
    */
-  applyScene(scene: SavedScene, live: Scene) {
+  applyScene(scene: SavedScene, live: Scene, all: readonly number[]) {
     const edits = { ...draft.edits };
     for (const s of live.shaders) {
       if (s.stage === "failed" || isBase(s)) continue;
-      const { muted: _muted, params, ...rest } = edits[s.key] ?? {};
-      // Its pending mute gives way; its pending knobs too, if it's the scene's sketch.
-      const kept = Object.hasOwn(scene.shaders, s.key) ? rest : { ...rest, ...(params ? { params } : {}) };
+      // Its pending on and off gives way (a sketch's mask, any other's mute); its pending knobs too, if it's the scene's sketch.
+      const { muted: _muted, mask, params, ...rest } = edits[s.key] ?? {};
+      const kept = { ...rest, ...(!s.instance && mask ? { mask } : {}), ...(Object.hasOwn(scene.shaders, s.key) || !params ? {} : { params }) };
       if (Object.keys(kept).length > 0) edits[s.key] = kept;
       else delete edits[s.key];
     }
     const { on, off, knobs } = applyingOf(scene, live.shaders, live.pools);
-    for (const key of off) edits[key] = { ...edits[key], muted: true };
-    for (const key of on) edits[key] = { ...edits[key], muted: false };
+    const switched = (key: string, to: boolean): ShaderPatch => {
+      const s = live.shaders.find((x) => x.key === key)!;
+      if (!s.instance) return muteFor(to);
+      if (!to) return { mask: sortedIds(all) };
+      const home = new Set(s.instance.home);
+      return { ...(s.muted ? { muted: false } : {}), mask: all.filter((id) => !home.has(id)) };
+    };
+    for (const key of off) edits[key] = { ...edits[key], ...switched(key, false) };
+    for (const key of on) edits[key] = { ...edits[key], ...switched(key, true) };
     for (const k of knobs) {
       const params = edits[k.key]?.params ?? {};
       edits[k.key] = { ...edits[k.key], params: { ...params, [k.param]: { ...params[k.param], ...Object.fromEntries(k.set) } } };
