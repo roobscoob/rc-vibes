@@ -12,6 +12,10 @@
 // light builds up through them: in the room, on its way in, or one you're
 // adding (or taking out). Which lights a shader's on, and everything else
 // done to it, is the layers panel's (ShadersPanel.tsx): here are its params.
+// On a phone, which has no layers panel, it's here instead: every shader in
+// the stack (on these lights or not), each with its switch in its head
+// (ShaderSwitch.tsx, about these lights) and its Sketch opened under its
+// params (ShadersPanel's sketchSectionOf).
 
 import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import type { Channels, LightInfo } from "../../shared/arclamp.ts";
@@ -46,17 +50,18 @@ import type { SelectMode } from "../selection.ts";
 import { Tooltip } from "./Tooltip.tsx";
 import { offDefault, paramRowsOf, resetParams, ShaderParams } from "./ShaderParams.tsx";
 import { TagChips } from "./TagChips.tsx";
+import { ShaderSwitch } from "./ShaderSwitch.tsx";
+import { sketchSectionOf } from "./ShadersPanel.tsx";
 import { useOpened } from "../opened.ts";
 import { useOnFocus } from "../focus.ts";
 import { useShowUnsaved } from "../unsaved.ts";
 import { usePointsOut } from "../hint.ts";
-import { useStuckHeads } from "../stuck.ts";
 
 const NO_SCENE: Scene = { shaders: [], roomtone: null, pools: {} };
 
 
 // The sheet's middle height, at most, as a share of the screen.
-const HALF = 0.6;
+const HALF = 0.7;
 // A sheet let go faster than this (px per ms) was flicked: it goes on to the
 // next height that way. Slower, or after a pause this long (ms), it settles at the nearest.
 const FLICK = 0.4;
@@ -114,8 +119,26 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     [...going].flatMap((key) => layerOf(live, draft, key) ?? []),
     live,
   );
-  // Not one made outside vibes: it's only muted or not, with no lights (or params) of its own here.
-  const onThese = [...shown].reverse().filter((layer) => changeable(layer) && (layer.instance || layer.adding) && [...selected].some(onFor(layer)));
+  // On a phone (no layers panel): every shader, to switch on these lights or not. Else the ones
+  // on these lights, but not one made outside vibes: it's only muted or not, with no lights (or params) here.
+  const narrow = useNarrow();
+  const onThese = [...shown]
+    .reverse()
+    .filter((layer) => changeable(layer) && (narrow || ((layer.instance || layer.adding) && [...selected].some(onFor(layer)))));
+  // The switches' lights: those selected (each, of them, the ones it can light: ShaderSwitch); with none, each whole shader.
+  const scope = chosen.length > 0 ? chosen : null;
+  const all = lights.data?.lights ?? [];
+  /** What a row opens to: its params on these lights, and on a phone, its Sketch. */
+  const detailsFor = (layer: Layer): ReactNode | null => {
+    const params = detailsOf(layer, chosen);
+    const sketch = narrow ? sketchSectionOf(layer, live, all) : null;
+    return params === null && sketch === null ? null : (
+      <>
+        {params}
+        {sketch}
+      </>
+    );
+  };
   // The room tone, the room's "normal", is admin view's to change; everyone's color is the base Tone's
   // (shared/base-color.ts: vibes' own shader at the bottom, on every light, always in).
   const admin = useAdminMode();
@@ -133,24 +156,30 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     opened.only([...base, key]);
   });
 
-  const title = `${count(chosen.length, "light")} selected`;
+  // On a phone it's there with nothing selected too (App.tsx): just its head and the groups.
+  const none = chosen.length === 0;
+  const title = none ? "No lights selected" : `${count(chosen.length, "light")} selected`;
   const toneToggle = toggling(opened.isOpen("roomtone"), () => opened.toggle("roomtone"));
 
-  // As a sheet, the heights it rests at: its head (and the safe area under
-  // it); up to HALF the screen, or less when that's all of it; the screen.
-  const narrow = useNarrow();
+  // As a sheet, the heights it rests at: its head, the groups in it (and
+  // the safe area under it); up to HALF the screen, or less when that's all
+  // of it; the screen.
   const head = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  useStuckHeads(body);
+  // The opened row's head pinned above what scrolls (Sidebar's): a finger's drag on it moves the sheet as one on what scrolls does.
+  const pinHead = useRef<HTMLDivElement>(null);
   const [heights, setHeights] = useState<Record<Rest, number> | null>(null);
   useLayoutEffect(() => {
     if (!narrow) return;
     const el = panel.current!;
     const app = el.parentElement!;
     const measure = () => {
+      // Its head, the groups in it: the chips to select by.
       const peek = head.current!.offsetHeight + (parseFloat(getComputedStyle(el).paddingBottom) || 0);
       const full = app.clientHeight;
-      const half = Math.max(peek, Math.min(peek + body.current!.scrollHeight, full * HALF));
+      // What's in it (not what scrolls: that's less by a pinned head's height).
+      const inside = (body.current!.firstElementChild as HTMLElement).offsetHeight;
+      const half = Math.max(peek, Math.min(peek + inside, full * HALF));
       setHeights((h) => (h && h.peek === peek && h.half === half && h.full === full ? h : { peek, half, full }));
     };
     measure();
@@ -168,14 +197,26 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
   // middle. The height mid-drag is kept in a ref too, as a quick flick can
   // let go before React re-renders.
   const [rest, setRest] = useState<Rest>("peek");
+  // The selection changed (however: a chip, the map, a box, a layer's lights): with something
+  // selected, up from resting, to show what's on those lights; with nothing, back down to its
+  // head and the groups, all there is. Pulled up further already, it stays.
+  const selectionKey = [...selected].sort((a, b) => a - b).join();
+  const seen = useRef(selectionKey);
+  useEffect(() => {
+    if (seen.current === selectionKey) return;
+    seen.current = selectionKey;
+    if (none) setRest("peek");
+    else setRest((r) => (r === "peek" ? "half" : r));
+  }, [selectionKey, none]);
   // The heights it rests at, shortest first (with just a little in it, fewer than three).
   const rests = heights ? (["peek", "half", "full"] as const).filter((r, i, all) => i === 0 || heights[r] > heights[all[i - 1]!]) : [];
   const [dragged, setDragged] = useState<number | null>(null);
   const grip = useRef<{ y: number; from: number; at: number; lastY: number; lastT: number; speed: number; moved: boolean } | null>(null);
   const grab = {
     onPointerDown: (e: PointerEvent<HTMLElement>) => {
-      // Its own buttons do their own things, but the grabber, which is where it's pulled from.
-      if (!narrow || !heights || (e.target as Element).closest("button:not(.sidebar-grabber)")) return;
+      // Its own buttons do their own things, but the grabber, which is where it's pulled from;
+      // and the row of chips in it scrolls sideways under a finger.
+      if (!narrow || !heights || (e.target as Element).closest("button:not(.sidebar-grabber), .tag-chips")) return;
       const from = panel.current!.offsetHeight;
       grip.current = { y: e.clientY, from, at: from, lastY: e.clientY, lastT: e.timeStamp, speed: 0, moved: false };
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -225,7 +266,7 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
         onClick: (e: MouseEvent) => e.detail === 0 && setRest(rests[(rests.indexOf(rest) + 1) % rests.length] ?? "peek"),
       }
     : undefined;
-  // Tabbing into what's under its head while it's just its head: up to its middle, so what has the keyboard shows.
+  // Tabbing into what's under its head while it rests: up to its middle, so what has the keyboard shows.
   const peeking = !!sheet && rest === "peek";
   useEffect(() => {
     if (!peeking) return;
@@ -235,9 +276,83 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     return () => el.removeEventListener("focusin", up);
   }, [peeking]);
 
+  // A finger dragging what's in it moves the sheet first, as a map's sheet
+  // does: up, it grows till it's the whole screen, and only then does what's
+  // in it scroll; down, with what's in it scrolled to its top, it shrinks.
+  // Anything else (scrolling down through it, or what's under the finger
+  // taking its own drags: a slider, a color picker, a switch) is left to
+  // itself. Touch events, as only they can stop the scroll before it starts.
+  const latest = useRef({ heights, rest, rests });
+  latest.current = { heights, rest, rests };
+  useEffect(() => {
+    if (!sheet) return;
+    const el = body.current!;
+    let t: { y: number; from: number; at: number; lastY: number; lastT: number; speed: number; mine: boolean | null } | null = null;
+    const start = (e: TouchEvent) => {
+      if (e.touches.length !== 1 || (e.target as Element).closest("input, textarea, [role=slider], .slider-track, .picker, .color-box, .segmented, .tag-chips")) {
+        t = null;
+        return;
+      }
+      const y = e.touches[0]!.clientY;
+      const from = panel.current!.offsetHeight;
+      t = { y, from, at: from, lastY: y, lastT: e.timeStamp, speed: 0, mine: null };
+    };
+    const move = (e: TouchEvent) => {
+      const { heights: hs } = latest.current;
+      if (!t || !hs) return;
+      const y = e.touches[0]!.clientY;
+      const dy = y - t.y;
+      // Decided once it's moved: the sheet's, if it's pulled up short of the top, or down from a list at its top.
+      if (t.mine === null) {
+        if (Math.abs(dy) <= TAP_PX) return;
+        const up = dy < 0;
+        t.mine = up ? t.from < hs.full - 1 : el.scrollTop <= 0;
+        if (!t.mine) return;
+        // From here, measured from where the sheet takes over.
+        t.y = y;
+      }
+      if (!t.mine) return;
+      e.preventDefault();
+      const dt = Math.max(1, e.timeStamp - t.lastT);
+      t.speed = 0.6 * ((t.lastY - y) / dt) + 0.4 * t.speed;
+      [t.lastY, t.lastT] = [y, e.timeStamp];
+      t.at = Math.min(hs.full, Math.max(hs.peek, t.from - (y - t.y)));
+      setDragged(t.at);
+    };
+    const end = (e: TouchEvent) => {
+      const { heights: hs, rests: rs } = latest.current;
+      const g = t;
+      t = null;
+      if (!g?.mine || !hs) return;
+      setDragged(null);
+      const speed = e.timeStamp - g.lastT > PAUSE_MS ? 0 : g.speed;
+      const nearest = rs.reduce((best, r) => (Math.abs(hs[r] - g.at) < Math.abs(hs[best] - g.at) ? r : best));
+      if (speed > FLICK) setRest(rs.find((r) => hs[r] > g.at + 1) ?? "full");
+      else if (speed < -FLICK) setRest([...rs].reverse().find((r) => hs[r] < g.at - 1) ?? "peek");
+      else setRest(nearest);
+    };
+    // On what scrolls, and on a row's head pinned above it (which scrolls it: pinned.ts), alike.
+    const targets = [el, pinHead.current!];
+    for (const target of targets) {
+      target.addEventListener("touchstart", start, { passive: true });
+      target.addEventListener("touchmove", move, { passive: false });
+      target.addEventListener("touchend", end);
+      target.addEventListener("touchcancel", end);
+    }
+    return () => {
+      for (const target of targets) {
+        target.removeEventListener("touchstart", start);
+        target.removeEventListener("touchmove", move);
+        target.removeEventListener("touchend", end);
+        target.removeEventListener("touchcancel", end);
+      }
+    };
+  }, [sheet]);
+
   // As a sheet, its height lifts the map's bottom controls clear of it
-  // (--sheet-h), up to its middle height: taller, they stay put and it rises over them.
-  const lift = sheet ? heights.half : Infinity;
+  // (--sheet-h), up to its resting height (its head and the groups): pulled
+  // up past that, they stay put and it rises over them.
+  const lift = sheet ? heights.peek : Infinity;
   useLayoutEffect(() => {
     const el = panel.current!;
     const app = el.parentElement!;
@@ -251,6 +366,52 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
     };
   }, [lift]);
 
+  // Room tone's row (in admin view), and a shader's: in the list, or (pinned) just its head, pinned above the list as what it shows scrolls up.
+  const toneRow = (pinned: boolean) => {
+    const open = opened.isOpen("roomtone");
+    return (
+      <li key="roomtone" className={open ? "layer base open" : "layer base"} data-pin={open && !pinned ? "roomtone" : undefined}>
+        {/* All of its head opens and closes it. */}
+        <div className="layer-rail">
+          <ToneNode colors={toneColors(chosen, template, gamut)} />
+        </div>
+        <div className="layer-head toggle" {...toneToggle.head}>
+          <span className="layer-text">
+            <span className="layer-name layer-name-button" {...toneToggle.name}>
+              Room Tone
+            </span>
+          </span>
+          <Chevron />
+        </div>
+        {!pinned && (
+          <Reveal open={open}>
+            <SidebarDetails>
+              <RoomToneEditor lights={chosen} template={template} />
+            </SidebarDetails>
+          </Reveal>
+        )}
+      </li>
+    );
+  };
+  const shaderRow = (layer: Layer, pinned: boolean) => (
+    <ShaderRow
+      key={layer.key}
+      layer={layer}
+      lights={chosen}
+      details={detailsFor(layer)}
+      opened={isOpen(layer)}
+      onToggle={() => toggle(layer)}
+      aside={narrow ? <ShaderSwitch layer={layer} selected={scope} all={all} /> : null}
+      pinned={pinned}
+    />
+  );
+  const pinnedRow = ({ key }: { key: string }) => {
+    if (none) return null;
+    if (key === "roomtone") return admin ? toneRow(true) : null;
+    const layer = onThese.find((l) => l.key === key);
+    return layer && !going.has(key) ? shaderRow(layer, true) : null;
+  };
+
   return (
     <Sidebar
       ref={panel}
@@ -259,66 +420,48 @@ export function SelectionPanel({ here, selected, save, onSelect }: Props) {
       className={[unsaved && "unsaved", sheet && dragged !== null && "dragging", sheet && rest === "full" && dragged === null && "full"].filter(Boolean).join(" ")}
       style={sheet ? { height: dragged ?? heights[rest] } : undefined}
       headRef={head}
-      headProps={grab}
-      grabber={grabber}
+      // Nothing selected, there's nothing more to show: no grabber, and its head doesn't pull it up.
+      headProps={none ? undefined : grab}
+      grabber={none ? undefined : grabber}
       bodyRef={body}
+      pinned={pinnedRow}
+      pinRef={pinHead}
+      // On a phone, the groups in place of its title (how many are selected is what they show, filled).
       head={
-        <>
-          {title}
-          <UnsavedMark here={here} onSelect={onSelect} />
-        </>
+        narrow ? (
+          <>
+            <Groups here={here} selected={selected} onSelect={onSelect} />
+            <UnsavedMark here={here} onSelect={onSelect} />
+          </>
+        ) : (
+          <>
+            {title}
+            <UnsavedMark here={here} onSelect={onSelect} />
+          </>
+        )
       }
       actions={
         <>
           <SaveButtons save={save} />
-          <button className="icon-button deselect-all" onClick={() => onSelect([], "replace")} aria-label="Deselect all">
-            <CloseIcon />
-          </button>
+          {!none && (
+            <button className="icon-button deselect-all" onClick={() => onSelect([], "replace")} aria-label="Deselect all">
+              <CloseIcon />
+            </button>
+          )}
         </>
       }
     >
-      <Groups here={here} selected={selected} onSelect={onSelect} />
+      {!narrow && <Groups here={here} selected={selected} onSelect={onSelect} />}
       {/* The rows read in the order light builds up: room tone, then each shader over what's above it.
               Their order is the room's, not these lights': it's changed in the layers panel. */}
+      {!none && (
       <ol className="layers">
             {/* Always the base, in admin view: it can't move or be switched off. Its parameter, the
                         color, opens under it (open to start with). */}
-            {admin && (
-            <li className={opened.isOpen("roomtone") ? "layer base open" : "layer base"}>
-              {/* All of its head opens and closes it. */}
-              <div className="layer-rail">
-                <ToneNode colors={toneColors(chosen, template, gamut)} />
-              </div>
-              <div className="layer-head toggle" {...toneToggle.head}>
-                <span className="layer-text">
-                  <span className="layer-name layer-name-button" {...toneToggle.name}>
-                    Room Tone
-                  </span>
-                </span>
-                <Chevron />
-              </div>
-              <Reveal open={opened.isOpen("roomtone")}>
-                <SidebarDetails>
-                  <RoomToneEditor lights={chosen} template={template} />
-                </SidebarDetails>
-              </Reveal>
-            </li>
-            )}
-            {onThese.map((layer) =>
-              going.has(layer.key) ? (
-                <GoingRow key={layer.key} layer={layer} />
-              ) : (
-                <ShaderRow
-                  key={layer.key}
-                  layer={layer}
-                  lights={chosen}
-                  details={detailsOf(layer, chosen)}
-                  opened={isOpen(layer)}
-                  onToggle={() => toggle(layer)}
-                />
-              ),
-            )}
+            {admin && toneRow(false)}
+            {onThese.map((layer) => (going.has(layer.key) ? <GoingRow key={layer.key} layer={layer} /> : shaderRow(layer, false)))}
       </ol>
+      )}
     </Sidebar>
   );
 }
@@ -586,6 +729,10 @@ interface RowProps {
   details: ReactNode | null;
   opened: boolean;
   onToggle: () => void;
+  /** In its head, before its chevron: on a phone, its switch. */
+  aside?: ReactNode;
+  /** Its head pinned above the list (Sidebar's): just its head, a copy of the one in the list. */
+  pinned?: boolean;
 }
 
 /**
@@ -634,7 +781,7 @@ const Chevron = () => (
  * own things); one with nothing to show doesn't, and doesn't light up.
  */
 function ShaderRow(props: RowProps) {
-  const { layer, lights, details, opened, onToggle } = props;
+  const { layer, lights, details, opened, onToggle, pinned } = props;
   const expandable = details !== null;
   const open = opened && expandable;
   // Not in the room yet: on its way in, or yours to add (previewed once it's built).
@@ -643,7 +790,7 @@ function ShaderRow(props: RowProps) {
   const toggle = expandable ? toggling(open, onToggle) : null;
   const head = <RowParts {...props} name={toggle?.name} />;
   return (
-    <li className={`layer${coming}${open ? " open" : ""}`}>
+    <li className={`layer${coming}${open ? " open" : ""}`} data-pin={open && !pinned ? layer.key : undefined}>
       <div className="layer-rail">
         <ShaderNode layer={layer} lights={lights} hollow={!inPreview(layer)} />
       </div>
@@ -654,7 +801,7 @@ function ShaderRow(props: RowProps) {
       ) : (
         <div className="layer-head">{head}</div>
       )}
-      {expandable && (
+      {expandable && !pinned && (
         <Reveal open={open}>
           <SidebarDetails>{details}</SidebarDetails>
         </Reveal>
@@ -669,7 +816,7 @@ function ShaderRow(props: RowProps) {
  * or, if it shows nothing, the quiet dot in its place, so every row ends in
  * the same column.
  */
-function RowParts({ layer, lights, details, name }: RowProps & { name?: HTMLAttributes<HTMLSpanElement> }) {
+function RowParts({ layer, lights, details, name, aside }: RowProps & { name?: HTMLAttributes<HTMLSpanElement> }) {
   const sketch = layer.sketch;
   // Its params on these lights, if any aren't at their default: one link puts them all back, under its name.
   const changed = offDefault(layer, paramRowsOf(layer, lights));
@@ -691,6 +838,7 @@ function RowParts({ layer, lights, details, name }: RowProps & { name?: HTMLAttr
           </span>
         )}
       </span>
+      {aside}
       {details !== null ? (
         <Chevron />
       ) : (
@@ -700,7 +848,7 @@ function RowParts({ layer, lights, details, name }: RowProps & { name?: HTMLAttr
   );
 }
 
-/** One you're taking out, when you apply: where it is, crossed out, to keep after all. */
+/** One you're taking out, when you apply: where it is, its name grey and crossed out, with Restore (as the layers panel's row has). */
 function GoingRow({ layer }: { layer: Layer }) {
   return (
     <li className="layer coming going">
@@ -710,11 +858,11 @@ function GoingRow({ layer }: { layer: Layer }) {
       <div className="layer-head">
         <span className="layer-text">
           <span className="layer-name" title={layer.name}>
-            {layer.name}
+            <span className="layer-name-text">{layer.name}</span>
           </span>
         </span>
-        <button className="quiet layer-keep" onClick={() => drafts.keep(layer.key)}>
-          Keep
+        <button className="quiet layer-keep" onClick={() => drafts.keep(layer.key)} aria-label={`Restore ${layer.name}`}>
+          Restore
         </button>
         <span className="layer-chevron layer-end" aria-hidden="true" />
       </div>

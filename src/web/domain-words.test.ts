@@ -52,6 +52,12 @@ describe("a domain in words", () => {
     expect(domainWords([1, 2, 3, 6, 7, 8], all)).toBe("Couches, Side Rooms, and 1 more light");
   });
 
+  it("counts the old bulbs for a shader that lights them (the base Tone)", () => {
+    expect(domainWords([1, 2, 3, 9], all, true)).toBe("Couches");
+    expect(domainWords([1, 2, 3], all, true)).toBe("3 lights");
+    expect(domainWords([1, 2, 3, 4, 5, 6, 7, 8, 9], all, true)).toBe("All lights");
+  });
+
   it("is just a count with no group inside it", () => {
     expect(domainWords([1, 4], all)).toBe("2 lights");
     expect(domainWords([8], all)).toBe("1 light");

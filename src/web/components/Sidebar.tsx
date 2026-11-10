@@ -6,7 +6,8 @@
 // what's done to it on the right), and Fields (Field.tsx) are its rows: one
 // layout, one spacing, left and right.
 
-import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode, type RefObject } from "react";
+import { forwardRef, useImperativeHandle, useRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode, type RefObject } from "react";
+import { usePinnedHead, useForwardScroll, useUntabbable, type Pin } from "../pinned.ts";
 
 interface SidebarProps {
   side: "left" | "right";
@@ -24,23 +25,52 @@ interface SidebarProps {
   headProps?: HTMLAttributes<HTMLDivElement>;
   grabber?: ButtonHTMLAttributes<HTMLButtonElement>;
   bodyRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * An opened row's head, pinned above the body (pinned.ts), as the row
+   * (`data-pin`, its key) draws it in the list: its <li>, without what it
+   * opens to.
+   */
+  pinned?: (pin: Pin) => ReactNode;
+  /** What holds the pinned head, for what takes a finger's drag on it (the sheet's). */
+  pinRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
 
 /** A glass column over the map's edge: its head, then its body, scrolling. */
 export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
-  { side, label, head, actions, className, style, headRef, headProps, grabber, bodyRef, children },
+  { side, label, head, actions, className, style, headRef, headProps, grabber, bodyRef, pinned, pinRef, children },
   ref,
 ) {
+  const aside = useRef<HTMLElement>(null);
+  useImperativeHandle(ref, () => aside.current!, []);
+  const ownBody = useRef<HTMLDivElement>(null);
+  const body = bodyRef ?? ownBody;
+  const ownPinHead = useRef<HTMLDivElement>(null);
+  const pinHead = pinRef ?? ownPinHead;
+  const slot = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const pin = usePinnedHead(aside, slot, body, content);
+  useForwardScroll(slot, body);
+  useUntabbable(slot);
   return (
-    <aside ref={ref} className={["sidebar", side, className].filter(Boolean).join(" ")} aria-label={label} style={style}>
+    <aside ref={aside} className={["sidebar", side, className].filter(Boolean).join(" ")} aria-label={label} style={style}>
       <div className="sidebar-head" ref={headRef} {...headProps}>
         {grabber && <button className="sidebar-grabber" {...grabber} />}
         <h2 className="sidebar-title">{head}</h2>
         {actions}
       </div>
-      <div className="sidebar-body" ref={bodyRef}>
-        {children}
+      {/* A copy of the head in the list, which is the one for the keyboard and screen readers. */}
+      <div className="sidebar-pin" ref={slot} aria-hidden="true">
+        <div className="sidebar-pin-head" ref={pinHead}>
+          {pin && pinned && (
+            <ol className={["layers", pin.first && "first", pin.last && "last"].filter(Boolean).join(" ")}>{pinned(pin)}</ol>
+          )}
+        </div>
+      </div>
+      <div className="sidebar-body" ref={body}>
+        <div className="sidebar-content" ref={content}>
+          {children}
+        </div>
       </div>
     </aside>
   );

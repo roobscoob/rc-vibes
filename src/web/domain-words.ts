@@ -2,10 +2,10 @@
 // lights people know them by (tags.ts: the places, then the tags): "All
 // lights", "Presentation Space", "Turing and Sammet", "Presentation Space,
 // Dave, Kitchen, Dining Room, Couches, and 4 more lights", or just "12
-// lights" when no group fits inside them. Only the
-// lights shaders can light count (not the old bulbs, which are only on or
-// off): a group's those of its lights, so one with old bulbs in it still
-// fits a domain that has all of its others.
+// lights" when no group fits inside them. Only the lights the shader can
+// light count: for most, not the old bulbs (only on or off, which only the
+// base Tone sets: `oldBulbs`), so a group's those of its lights, and one with
+// old bulbs in it still fits a domain that has all of its others.
 
 import type { LightInfo } from "../shared/arclamp.ts";
 import { isBinary } from "../shared/fixtures.ts";
@@ -41,8 +41,8 @@ function groupsOf(all: readonly Light[]): Group[] {
  * its parts, so one named takes its parts with it), each only if it adds
  * some not already said; and whatever's left as "N more lights".
  */
-export function domainWords(domain: readonly number[], every: readonly Light[]): string {
-  const all = every.filter(shadeable);
+export function domainWords(domain: readonly number[], every: readonly Light[], oldBulbs = false): string {
+  const all = oldBulbs ? [...every] : every.filter(shadeable);
   const capable = new Set(all.map((l) => l.id));
   const ids = domain.filter((id) => capable.has(id));
   if (ids.length === 0) return "No lights";

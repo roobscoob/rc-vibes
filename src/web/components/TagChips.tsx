@@ -14,6 +14,7 @@
 
 import type { ReactNode } from "react";
 import type { LightInfo } from "../../shared/arclamp.ts";
+import { isBinary } from "../../shared/fixtures.ts";
 import { groupRank, inMainSpace, inSideRooms, tagLabel } from "../../shared/tags.ts";
 import { usePointsOut } from "../hint.ts";
 import type { SelectMode } from "../selection.ts";
@@ -28,7 +29,14 @@ interface Props {
 export function TagChips({ lights, selected, onSelect }: Props) {
   const byTag = new Map<string, number[]>();
   for (const l of lights) for (const t of l.tags ?? []) byTag.set(t, [...(byTag.get(t) ?? []), l.id]);
-  const chipOf = (tag: string, label: string, ids: number[]) => ({ tag, label, ids, on: ids.length > 0 && ids.every((id) => selected.has(id)) });
+  // A chip's on while its color lights are all selected: its old bulbs needn't be (a shader's lights,
+  // selected from its row, are only ever color lights, and its group should say so). One of old bulbs alone, all of them.
+  const old = new Set(lights.filter((l) => isBinary(l.type)).map((l) => l.id));
+  const chipOf = (tag: string, label: string, ids: number[]) => {
+    const color = ids.filter((id) => !old.has(id));
+    const need = color.length > 0 ? color : ids;
+    return { tag, label, ids, on: need.length > 0 && need.every((id) => selected.has(id)) };
+  };
   const tags = [...byTag].map(([tag, ids]) => chipOf(tag, tagLabel(tag), ids));
   // The places: the main space and the side rooms (each only where it's a part of what's here).
   const place = (key: string, label: string, ids: number[]) => (ids.length > 0 && ids.length < lights.length ? [chipOf(key, label, ids)] : []);

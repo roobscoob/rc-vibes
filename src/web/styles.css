@@ -485,7 +485,7 @@ kbd {
 }
 
 /* Each sidebar's edge toward the map: a hairline over everything in it, so a
-   row's head stuck to the top (or a row being dragged) doesn't paint over it. */
+   row being dragged doesn't paint over it. */
 .sidebar::after {
   content: "";
   position: absolute;
@@ -721,9 +721,57 @@ kbd {
   align-content: start;
   min-height: 0;
   overflow-y: auto;
+  /* Its top edge moves down under a pinned head, and what's in it up by as
+     much (below): kept where it is on the screen, not where a browser would
+     anchor it. */
+  overflow-anchor: none;
   border-top: 1px solid var(--line);
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
+}
+
+.sidebar-content {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  margin-top: calc(-1 * var(--pin-shift, 0px));
+}
+
+/* An opened row's head, pinned above the body while the row's head has gone
+   up past its top and what the row shows hasn't (pinned.ts): outside the
+   body, which starts under it (and its line under the head is the body's own
+   line), so the body's own edge cuts off what goes up under it. Its line
+   above it is the one the body had. Pushed up by the end of its row, the
+   edge with it. Glass, as the head in the list is: nothing under it shows,
+   as it's not over the body. */
+.sidebar-pin {
+  flex: none;
+  height: var(--pin-shift, 0px);
+  padding-right: var(--pin-gutter, 0px);
+  overflow: hidden;
+  border-top: min(1px, var(--pin-shift, 0px)) solid var(--line);
+  touch-action: none;
+}
+
+.sidebar-pin-head {
+  transform: translateY(calc(-1 * var(--pin-push, 0px)));
+}
+
+/* Just its head: no line under the row, nor under the head (the body's). */
+.sidebar-pin .layer {
+  border-bottom: 0;
+}
+
+.sidebar-pin .layer.open > .layer-rail,
+.sidebar-pin .layer.open > .layer-head {
+  box-shadow: none;
+}
+
+/* The rail on through its stop, as in the list (where it's cut off at its
+   row's top and bottom, but for the list's first and last rows). */
+.sidebar-pin .layers:not(.first) .layer-node::before,
+.sidebar-pin .layers:not(.last) .layer-node::after {
+  display: block;
 }
 
 /* What the selection looks like, in a card in the map's top left (under the
@@ -987,13 +1035,14 @@ kbd {
   list-style: none;
 }
 
-/* Clipped, so each row's piece of the rail stops at its edges (clip, not
-   hidden, so its head can still stick to the top of the panel's scroll). */
+/* Clipped, so each row's piece of the rail stops at its edges. */
 .layer {
+  /* Between the rail and what's beside it (a head reaching back over it uses it too). */
+  --rail-gap: 16px;
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 10px;
+  column-gap: var(--rail-gap);
   overflow: clip;
   border-bottom: 1px solid var(--line);
 }
@@ -1014,41 +1063,19 @@ kbd {
   grid-column: 2;
 }
 
-/* Opened, its head (the rail's stop and the head beside it) sticks to the
-   top of the panel as what it shows scrolls up, so with several open it's
-   plain whose this is. It looks just as it does anywhere else: rather than
-   covering what's under it, what it shows is cut off at the head's bottom
-   (--stuck-by, how far the head's been pushed down its row: useStuckHeads). */
-.layer.open > .layer-rail,
-.layer.open > .layer-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.layer.open > .reveal {
-  clip-path: inset(var(--stuck-by, 0px) 0 0 0);
-}
-
-/* A row that's always open (the layers panel's) shows it with no Reveal
-   round it: its top margin is outside it, between it and the head, and its
-   clip reaches past its other edges so a focus ring there isn't cut off. */
-.layer.open > .layer-details {
-  clip-path: inset(calc(var(--stuck-by, 0px) - 16px) -8px -8px -8px);
-}
-
-/* Under a row's head, a hairline between it and what it shows, the whole
-   width of the row: on the head itself (and its stop's piece of the rail,
-   the head reaching back over the gap to it), so it goes wherever the head's
-   stuck, in step with the scroll. */
+/* Opened, a row's head pins above the panel's scroll as what it shows
+   scrolls up (.sidebar-pin, pinned.ts), so with several open it's plain
+   whose this is. Under its head, a hairline between it and what it shows,
+   the whole width of the row: on the head itself (and its stop's piece of
+   the rail, the head reaching back over the gap to it). */
 .layer.open > .layer-rail,
 .layer.open > .layer-head {
   box-shadow: 0 1px 0 var(--line);
 }
 
 .layer.open > .layer-head {
-  margin-left: -10px;
-  padding-left: 10px;
+  margin-left: calc(-1 * var(--rail-gap));
+  padding-left: var(--rail-gap);
 }
 
 .layer > .reveal,
@@ -1058,8 +1085,8 @@ kbd {
   /* Its clip reaches back over the gap toward the rail, so what it shows can
      line up with the head's text and a slider's thumb at the left end (half
      outside its track) still isn't clipped. */
-  margin-left: -16px;
-  padding-left: 16px;
+  margin-left: calc(-1 * (var(--rail-gap) - 2px));
+  padding-left: calc(var(--rail-gap) - 2px);
 }
 
 /* The rail: a line down through a stop on each row, as the light builds up
@@ -1148,8 +1175,8 @@ kbd {
   background: linear-gradient(var(--fill), var(--fill)) no-repeat 0 0 / 100% var(--head-h, 56px);
 }
 
-/* Opened, its head may be stuck further down: it lights up itself instead,
-   so the light goes with it in step with the scroll. */
+/* Opened, its head lights up itself instead (and so does the head pinned
+   above the scroll, a copy of it). */
 .layer.open:has(> .layer-head.toggle:hover) {
   background: none;
 }
@@ -1255,7 +1282,7 @@ html.dragging-layer * {
 }
 
 /* Being taken out, when you apply: grey, its name crossed out (not its
-   asterisk), with Restore (or Keep) in its switch's place. */
+   asterisk), with Restore in its switch's place. */
 .layer.going .layer-name {
   color: var(--mute);
   text-decoration: none;
@@ -1263,11 +1290,6 @@ html.dragging-layer * {
 
 .layer.going .layer-name-text {
   color: var(--mute);
-  text-decoration: line-through;
-}
-
-/* The selection's row for one going: its name's text is all there is in it. */
-.layer.going:not(.shader-row) .layer-name {
   text-decoration: line-through;
 }
 
@@ -2086,8 +2108,8 @@ button.layer-chevron:hover {
 .layer.shader-row > .layer-head {
   height: auto;
   min-height: var(--head-h, 56px);
-  margin-left: -10px;
-  padding-left: 10px;
+  margin-left: calc(-1 * var(--rail-gap));
+  padding-left: var(--rail-gap);
 }
 
 .shader-row .layer-meta {
@@ -2539,8 +2561,8 @@ button.layer-name-button {
     --inset-left: var(--gap);
   }
 
-  /* The scenes drawer makes way for the sheet. */
-  .app.has-selection .show-dock {
+  /* The scenes drawer makes way for the sheet, which is always there. */
+  .app .show-dock {
     display: none;
   }
 
@@ -2549,7 +2571,7 @@ button.layer-name-button {
   }
 
   /* The sheet covers the bottom instead (with the map's controls riding over it). */
-  .app.has-selection {
+  .app {
     --inset-bottom: calc(var(--sheet-h, 0px) + 52px);
   }
 
@@ -2603,6 +2625,36 @@ button.layer-name-button {
     -webkit-user-select: none;
   }
 
+  /* The groups in the head, in the title's place: one row of chips,
+     scrolled sideways (a chip's tap still selects; the head's pull, from
+     anywhere else on it, still moves the sheet). */
+  .sidebar.right .sidebar-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: normal;
+    line-height: inherit;
+  }
+
+  .sidebar.right .sidebar-title .panel-groups {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .sidebar.right .sidebar-title .panel-groups .tag-chips {
+    flex-wrap: nowrap;
+    margin: -8px 0 -8px -8px;
+    padding: 8px 28px 8px 8px;
+    overflow-x: auto;
+    touch-action: pan-x;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
   /* The grabber says the sheet moves; the whole head is what takes the pull.
      It's a button too, for the keyboard: a target round the bar it draws. */
   .sidebar-grabber {
@@ -2616,16 +2668,35 @@ button.layer-name-button {
     transform: translateX(-50%);
   }
 
+  /* Plain to see: it only shows when there's more to pull up (something selected). */
   .sidebar-grabber::before {
     content: "";
-    width: 36px;
+    width: 44px;
     height: 5px;
     border-radius: 3px;
-    background: var(--line-2);
+    background: var(--mute);
+    animation: grabber-in 0.3s var(--ease-out);
+    transition:
+      background 0.15s,
+      width 0.2s var(--ease-out);
+  }
+
+  .sidebar-grabber:hover::before,
+  .sidebar-grabber:focus-visible::before,
+  .sidebar.right.dragging .sidebar-grabber::before {
+    width: 52px;
+    background: var(--ink-2);
+  }
+
+  @keyframes grabber-in {
+    from {
+      width: 0;
+      opacity: 0;
+    }
   }
 
   /* The floors, zoom and drawer ride up above the sheet, keeping up with it frame by frame. */
-  .app.has-selection .map-bottom {
+  .app .map-bottom {
     bottom: var(--sheet-h, 0px);
   }
 }

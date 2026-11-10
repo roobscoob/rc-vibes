@@ -286,7 +286,8 @@ function Shell() {
               </div>
             </div>
           </div>
-          {hasSelection ? (
+          {/* On a phone the sheet's always there: how many are selected, and the groups, with nothing selected too. */}
+          {hasSelection || narrow ? (
             <SelectionPanel floor={floor} here={here} selected={selectedHere} save={save} onSelect={select} />
           ) : (
             !narrow && <IdlePanel here={here} selected={selectedHere} onSelect={select} save={save} />
