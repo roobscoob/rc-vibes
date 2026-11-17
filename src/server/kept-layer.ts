@@ -1,19 +1,19 @@
-// The Base Tone in the room (shared/base-color.ts). As vibes starts: Tone's
-// build (default-sketches.ts, as every default sketch's is made), and the
-// base Tone's instance (instances.ts' keepBase), at its params' defaults (it
-// copies nothing in from anywhere, so nothing it has is ever hidden from
-// view). From then on, kept: at the bottom (moved back there whenever
-// something's put under it), and what it last was (muted, its mask) noted,
-// so when its shader's gone (instances.ts' lost), it's back in as it was.
-// Taken out (its instance and pool with it), a new one goes in, at its
-// defaults. Gone in anew, it's held muted until its params have reached it;
-// and while it can't go in (arclamp away), it's tried again now and then.
+// A kept layer in the room (shared/kept-layers.ts: the Base Tone, Fade). As
+// vibes starts: its sketch's build (default-sketches.ts, as every default
+// sketch's is made), and its instance (instances.ts' keep), at its params'
+// defaults (it copies nothing in from anywhere, so nothing it has is ever
+// hidden from view). From then on, kept: at its end of the stack (moved back
+// there whenever something's put past it), and what it last was (muted, its
+// mask) noted, so when its shader's gone (instances.ts' lost), it's back in
+// as it was. Taken out (its instance and pool with it), a new one goes in, at
+// its defaults. Gone in anew, it's held muted until its params have reached
+// it; and while it can't go in (arclamp away), it's tried again now and then.
 //
-// Its build is every Tone's, so any Tone added to the room runs the base's
-// code.
+// Its build is its sketch's, so any Tone (or Fade) added to the room runs the
+// kept one's code.
 
 import type { ShaderDescriptor } from "../shared/arclamp.ts";
-import { BASE_COLOR, BASE_COLOR_SPECS } from "../shared/base-color.ts";
+import type { KeptLayer } from "../shared/kept-layers.ts";
 import type { Arclamp } from "./arclamp.ts";
 import type { Db } from "./db.ts";
 import type { DefaultSketches } from "./default-sketches.ts";
@@ -39,11 +39,11 @@ export interface SceneShader {
   mask: number[];
 }
 
-export interface BaseColorDeps {
+export interface KeptLayerDeps {
   db: Db;
-  /** Tone's build, as every default sketch's is made. */
+  /** Its sketch's build, as every default sketch's is made. */
   defaults: Pick<DefaultSketches, "build">;
-  instances: Pick<Instances, "keepBase">;
+  instances: Pick<Instances, "keep">;
   pools: Pick<Pools, "adopt" | "declare">;
   arclamp: Pick<Arclamp, "setMuted" | "moveShader">;
   /** Whether its pool's stream is open, so its params have reached it (params.ts); null with no params to wait for. */
@@ -52,8 +52,8 @@ export interface BaseColorDeps {
   holdMs?: number;
 }
 
-export function createBaseColor({ db, defaults, instances, pools, arclamp, linked, retryMs = RETRY_MS, holdMs = HOLD_MS }: BaseColorDeps) {
-  const owner = `instance:${BASE_COLOR.instance}`;
+export function createKeptLayer(layer: KeptLayer, { db, defaults, instances, pools, arclamp, linked, retryMs = RETRY_MS, holdMs = HOLD_MS }: KeptLayerDeps) {
+  const owner = `instance:${layer.instance}`;
   // Held muted, gone in anew, until its params reach it: its shader's id.
   let holding: number | null = null;
   let moving = false;
@@ -62,18 +62,18 @@ export function createBaseColor({ db, defaults, instances, pools, arclamp, linke
   /** In the room, as it's to be. */
   async function keep() {
     try {
-      const buildId = await defaults.build(BASE_COLOR.sketch);
-      pools.adopt(BASE_COLOR.pool, owner);
+      const buildId = await defaults.build(layer.sketch);
+      pools.adopt(layer.pool, owner);
       // Its knobs, from the start: what its code says once it runs.
-      pools.declare(BASE_COLOR.pool, BASE_COLOR_SPECS, owner);
-      await instances.keepBase(buildId, VIBES);
+      pools.declare(layer.pool, layer.specs, owner);
+      await instances.keep(layer, buildId, VIBES);
     } catch (err) {
-      console.warn(`Base Tone: couldn't put it in: ${(err as Error).message}`);
+      console.warn(`${layer.name}: couldn't put it in: ${(err as Error).message}`);
     }
   }
 
   const retry = setInterval(() => {
-    const inst = db.instance(BASE_COLOR.instance);
+    const inst = db.instance(layer.instance);
     if (!inst || inst.state === "failed") void keep();
   }, retryMs);
   retry.unref();
@@ -82,17 +82,17 @@ export function createBaseColor({ db, defaults, instances, pools, arclamp, linke
   async function hold(d: ShaderDescriptor) {
     holding = d.id;
     const until = Date.now() + holdMs;
-    while (!stopped && holding === d.id && linked && !linked(BASE_COLOR.pool) && Date.now() < until) {
+    while (!stopped && holding === d.id && linked && !linked(layer.pool) && Date.now() < until) {
       await new Promise((r) => setTimeout(r, HOLD_LOOK_MS));
     }
     if (holding !== d.id) return;
     holding = null;
-    const inst = db.instance(BASE_COLOR.instance);
+    const inst = db.instance(layer.instance);
     if (stopped || !inst || inst.shader_id !== d.id || inst.muted) return;
     try {
       await arclamp.setMuted(d.id, false);
     } catch (err) {
-      console.warn(`Base Tone: couldn't unmute it: ${(err as Error).message}`);
+      console.warn(`${layer.name}: couldn't unmute it: ${(err as Error).message}`);
     }
   }
 
@@ -102,24 +102,25 @@ export function createBaseColor({ db, defaults, instances, pools, arclamp, linke
 
     /** Gone in anew (instances.ts' putIn): held muted until its params reach it. */
     wentIn(id: string, d: ShaderDescriptor) {
-      if (id === BASE_COLOR.instance) void hold(d);
+      if (id === layer.instance) void hold(d);
     },
 
-    /** The scene, as the feed has made it (js shaders): it's noted as it is now, and moved back to the bottom if it's not there. */
+    /** The scene, as the feed has made it (js shaders): it's noted as it is now, and moved back to its end if it's not there. */
     scene(shaders: SceneShader[]) {
-      const inst = db.instance(BASE_COLOR.instance);
+      const inst = db.instance(layer.instance);
       if (!inst || inst.shader_id === null) return;
       const d = shaders.find((s) => s.id === inst.shader_id);
       if (!d) return;
       // What it is now, to go back in as, if it goes: not while it's held (muted only for now).
       if (holding !== d.id && (inst.muted !== d.muted || !sameIds(inst.mask ?? [], d.mask))) {
-        db.updateInstance(BASE_COLOR.instance, { muted: d.muted, mask: d.mask });
+        db.updateInstance(layer.instance, { muted: d.muted, mask: d.mask });
       }
-      if (d.position === 1 || moving) return;
+      const end = layer.at === "bottom" ? 1 : Math.max(...shaders.map((s) => s.position));
+      if (d.position === end || moving) return;
       moving = true;
       arclamp
-        .moveShader(d.id, 1)
-        .catch((err: Error) => console.warn(`Base Tone: couldn't move it back to the bottom: ${err.message}`))
+        .moveShader(d.id, end)
+        .catch((err: Error) => console.warn(`${layer.name}: couldn't move it back to the ${layer.at}: ${err.message}`))
         .finally(() => (moving = false));
     },
 
@@ -130,4 +131,4 @@ export function createBaseColor({ db, defaults, instances, pools, arclamp, linke
   };
 }
 
-export type BaseColor = ReturnType<typeof createBaseColor>;
+export type KeptLayerKeeper = ReturnType<typeof createKeptLayer>;

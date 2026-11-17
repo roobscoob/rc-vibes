@@ -29,7 +29,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { pathOf, type Op } from "../../shared/live.ts";
-import { isBase, knobsOf, onScene, shaderOn, type Scene as SavedScene, type Scenes } from "../../shared/scenes.ts";
+import { isKeptShader, knobsOf, onScene, shaderOn, type Scene as SavedScene, type Scenes } from "../../shared/scenes.ts";
 import type { CueMode } from "../../shared/show.ts";
 import { drafts } from "../draft.ts";
 import { MoreIcon } from "../icons.tsx";
@@ -93,7 +93,7 @@ function nextName(scenes: Scenes): string {
 }
 
 /** The shaders a scene could have as its sketch: every one in the room but Base Color, and any that failed. */
-const choosable = (room: Scene) => room.shaders.filter((s) => s.stage !== "failed" && !isBase(s));
+const choosable = (room: Scene) => room.shaders.filter((s) => s.stage !== "failed" && !isKeptShader(s));
 
 export function ScenesDrawer({ onHeight }: { onHeight: (px: number) => void }) {
   const showOn = useShowOn();

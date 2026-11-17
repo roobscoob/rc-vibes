@@ -19,7 +19,7 @@
 //
 //   event: state    data: { "v": 1, "values": { name: Groups } }   first, on every connect
 //   event: change   data: { "name": …, "set": Changes }            each edit, in order
-//   event: clock    data: { "v": 1, "clock": ShowClock }           the show clock: on connect, once set, and as it changes
+//   event: clock    data: { "v": 1, "clock": ShowClock, "on": … }  the show clock, and whether a show is on: on connect, once set, and as it changes
 //   event: end      data: { "reason": "replaced" | "revoked" | "gone" }
 //   : keep-alive                                                    every 15 s
 //
@@ -121,6 +121,8 @@ export interface ShowClock {
 export interface ClockEvent {
   v: 1;
   clock: ShowClock;
+  /** Whether a show is on (someone started one); left out, none is. */
+  on?: boolean;
 }
 
 /** Beats to a bar: a downbeat is a whole multiple of it. */

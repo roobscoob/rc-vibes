@@ -240,9 +240,9 @@ describe("linking shaders to their pools, and the pools' streams", () => {
     expect(await next()).toEqual({ event: "change", data: { name: "speed", set: [[5, [1]]] } });
   });
 
-  it("sends the show clock after the values, and down every stream as it changes", async () => {
+  it("sends the show clock after the values, and whether a show is on, and down every stream as they change", async () => {
     let clock: ShowClock = { playing: true, at: 1000, t: 0, bpm: 120, beat: 0, nudge: 0 };
-    const withClock = createParamLinks({ pools, arclamp: { evalShader: async () => ({ ok: true }) }, secret: SECRET, url: "https://vibes.test/shader-api/params", showClock: () => clock });
+    const withClock = createParamLinks({ pools, arclamp: { evalShader: async () => ({ ok: true }) }, secret: SECRET, url: "https://vibes.test/shader-api/params", showClock: () => clock, showOn: () => false });
     pools.ensure("q", "box:b");
     const open = (pool: string) =>
       withClock
@@ -251,13 +251,13 @@ describe("linking shaders to their pools, and the pools' streams", () => {
     const p = events(await open("p"));
     const q = events(await open("q"));
     expect((await p())!.event).toBe("state");
-    expect(await p()).toEqual({ event: "clock", data: { v: 1, clock } });
+    expect(await p()).toEqual({ event: "clock", data: { v: 1, clock, on: false } });
     await q();
     await q();
     clock = { ...clock, playing: false, at: 2000, t: 1 };
-    withClock.tellClock(clock);
-    expect(await p()).toEqual({ event: "clock", data: { v: 1, clock } });
-    expect(await q()).toEqual({ event: "clock", data: { v: 1, clock } });
+    withClock.tellClock(clock, true);
+    expect(await p()).toEqual({ event: "clock", data: { v: 1, clock, on: true } });
+    expect(await q()).toEqual({ event: "clock", data: { v: 1, clock, on: true } });
     withClock.stop();
   });
 

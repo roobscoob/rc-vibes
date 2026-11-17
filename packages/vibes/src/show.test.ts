@@ -82,6 +82,16 @@ describe("show", () => {
     expect(show.bpm(at(T))).toBe(120);
   });
 
+  it("says whether a show is on, as vibes sends it with the clock: none till it has", async () => {
+    const { show, host } = await load();
+    expect(show.on(at(T))).toBe(false);
+    host.apply("clock", { v: 1, clock: clock(), on: true });
+    expect(show.on(at(T))).toBe(true);
+    // From a vibes that doesn't say: none.
+    host.apply("clock", { v: 1, clock: clock() });
+    expect(show.on(at(T))).toBe(false);
+  });
+
   it("keeps the clock for the next script in the sandbox", async () => {
     const first = await load();
     first.host.apply("clock", { v: 1, clock: clock({ playing: false, t: 42 }) });

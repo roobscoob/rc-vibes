@@ -19,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import type { LiveTree } from "../shared/live.ts";
 import { sameValue, type ChangeEvent, type Changes, type ParamValue } from "../shared/params.ts";
-import { isBase, shaderOn, type SceneKnobs } from "../shared/scenes.ts";
+import { isKeptShader, shaderOn, type SceneKnobs } from "../shared/scenes.ts";
 import { cueAt } from "../shared/show.ts";
 import type { Me, Shader } from "../shared/vibes.ts";
 import type { Arclamp } from "./arclamp.ts";
@@ -119,7 +119,7 @@ export function createShowApply({ show, scenes, room, shaders, arclamp, pools, d
       const scene = scenes.get(id);
       if (!scene) throw new Refused(404, "no_such_scene", "there's no such scene");
       const tree = room();
-      const here = tree.stack.flatMap((k) => (tree.shaders[k] ? [tree.shaders[k]] : [])).filter((s) => s.stage !== "failed" && !isBase(s));
+      const here = tree.stack.flatMap((k) => (tree.shaders[k] ? [tree.shaders[k]] : [])).filter((s) => s.stage !== "failed" && !isKeptShader(s));
       if (!here.some((s) => Object.hasOwn(scene.shaders, s.key))) throw new Refused(400, "no_sketch", "none of its sketches are in the room");
       const frame = frameOf(cueAt(state.cue, state.clock, at, rNow() + LEAD_MS));
       const theirs = queued;

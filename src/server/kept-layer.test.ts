@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LightInfo, ShaderDescriptor } from "../shared/arclamp.ts";
 import { BASE_COLOR, BASE_COLOR_SPECS } from "../shared/base-color.ts";
+import { FADE, FADE_SPECS } from "../shared/fade.ts";
+import { BASE_LAYER, FADE_LAYER } from "../shared/kept-layers.ts";
 import type { RoomMessage } from "../shared/live.ts";
 import type { Me } from "../shared/vibes.ts";
 import type { AuthEnv } from "./auth.ts";
-import { createBaseColor, type BaseColor } from "./base-color.ts";
+import { createKeptLayer, type KeptLayerKeeper } from "./kept-layer.ts";
 import { createDefaultSketches, type DefaultSketches } from "./default-sketches.ts";
 import { DEFAULT_SKETCHES } from "../shared/default-sketches.ts";
 import type { Builds } from "./builds.ts";
@@ -46,13 +48,15 @@ let calls: string[];
 let pools: Pools;
 let instances: Instances;
 let shaders: Shaders;
-let base: BaseColor;
+let base: KeptLayerKeeper;
+let fade: KeptLayerKeeper;
 let defaults: DefaultSketches;
 let linkedNow: boolean;
 let next: number;
 
 const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 const baseId = () => db.instance(BASE_COLOR.instance)?.shader_id ?? null;
+const fadeId = () => db.instance(FADE.instance)?.shader_id ?? null;
 /** The scene's js shaders, bottom first, as the feed hands them on. */
 const stack = () => [...scene.values()].sort((a, b) => a.position - b.position).map((d) => ({ id: d.id, position: d.position, muted: d.muted, mask: d.mask ?? [] }));
 
@@ -117,13 +121,18 @@ beforeEach(() => {
   };
   const builds = { start: async () => ({ refused: "no builds here", status: 503 }), onFinish: () => () => {} } as unknown as Builds;
   pools = createPools({ db, publish: () => {}, lights: async () => INFO });
-  instances = createInstances({ config, db, arclamp, builds, lightIds: async () => LIGHTS, pools, wentIn: (id, d) => base.wentIn(id, d) });
+  instances = createInstances({ config, db, arclamp, builds, lightIds: async () => LIGHTS, pools, wentIn: (id, d) => [base, fade].forEach((k) => k.wentIn(id, d)) });
   shaders = createShaders({ config, arclamp, db, instances, pools });
   defaults = createDefaultSketches({ signingKey: KEY, db, script: async (s) => `${SCRIPT}// ${s.entry}\n` });
-  base = createBaseColor({ db, defaults, instances, pools, arclamp, linked: () => linkedNow, holdMs: 2000, retryMs: 60_000 });
+  const deps = { db, defaults, instances, pools, arclamp, linked: () => linkedNow, holdMs: 2000, retryMs: 60_000 };
+  base = createKeptLayer(BASE_LAYER, deps);
+  fade = createKeptLayer(FADE_LAYER, deps);
 });
 
-afterEach(() => base.stop());
+afterEach(() => {
+  base.stop();
+  fade.stop();
+});
 
 /** Base Color in, its params linked, and let go of being held. */
 async function started() {
@@ -334,5 +343,91 @@ describe("Base Tone", () => {
     const id = (made as { instance: { id: string } }).instance.id;
     expect(db.instance(id)!.build_id).toBe(db.buildsOf(transition.id, 1)[0]!.id);
     expect(await instances.update(id, undefined, ada)).toMatchObject({ code: "base_color" });
+  });
+});
+
+describe("Fade", () => {
+  /** The base Tone in, then Fade, as vibes starts them; their params linked, and both let go of being held. */
+  async function bothStarted() {
+    await base.start();
+    await fade.start();
+    linkedNow = true;
+    await settle(80);
+  }
+
+  /** A sketch of Ada's, built, to put in. */
+  function warmWave() {
+    db.addSketch({ id: SKETCH, name: "Warm wave", by_id: ada.id, by_name: ada.name, at: 0 });
+    const commit = "6".repeat(40);
+    db.addBuild({ id: "b1", sketch_id: SKETCH, commit_sha: commit, builder: "1", by_id: ada.id, by_name: ada.name, at: 0 });
+    db.finishBuild("b1", { state: "built", finished_at: 1, plan: "vite main.ts", error: null, log: "", script: stamp(SCRIPT, { sketch: SKETCH, commit, builder: "1" }, KEY) });
+  }
+
+  it("goes in as vibes starts, on: on top, on every light, at its defaults", async () => {
+    await bothStarted();
+    const id = fadeId()!;
+    expect(db.instance(FADE.instance)).toMatchObject({ state: "live", home: LIGHTS, pool_id: FADE.pool, sketch_id: FADE.sketch, muted: false });
+    expect(calls).toEqual([`create ${baseId()} at 1 muted`, `create ${id} at 2 muted`, `muted ${baseId()} false`, `muted ${id} false`]);
+    expect(scene.get(id)).toMatchObject({ position: 2, muted: false });
+    expect(scene.get(id)!.mask ?? []).toEqual([]);
+    const pool = pools.get(FADE.pool)!;
+    expect(pool.declared).toEqual(FADE_SPECS);
+    expect(pool.values.time ?? {}).toEqual({});
+  });
+
+  it("a sketch put in on top goes in just under it", async () => {
+    await bothStarted();
+    warmWave();
+    calls = [];
+    const made = await instances.create(SKETCH, { branch: "main", build: "b1" }, [1, 2], ada);
+    const id = db.instance((made as { instance: { id: string } }).instance.id)!.shader_id!;
+    expect(calls[0]).toBe(`create ${id} at 2 mask 3,4,5,6`);
+    expect(scene.get(fadeId()!)!.position).toBe(3);
+  });
+
+  it("a sketch put in just above it goes in under it all the same", async () => {
+    await bothStarted();
+    warmWave();
+    calls = [];
+    const made = await instances.create(SKETCH, { branch: "main", build: "b1" }, [1, 2], ada, undefined, { above: FADE.instance });
+    const id = db.instance((made as { instance: { id: string } }).instance.id)!.shader_id!;
+    expect(calls[0]).toBe(`create ${id} at 2 mask 3,4,5,6`);
+  });
+
+  it("stays on top: moved back when something's put over it, and wherever a reorder puts it", async () => {
+    await bothStarted();
+    const id = fadeId()!;
+    // Someone puts a shader in over it, through arclamp.
+    scene.set(99, { id: 99, type: "js", position: 0, script: "x", state: "running", muted: false, created_by: "x", modified_by: "x" });
+    place(99, 3);
+    calls = [];
+    fade.scene(stack());
+    await settle();
+    expect(calls).toEqual([`move ${id} 3`]);
+    expect(scene.get(id)!.position).toBe(3);
+    // A reorder with it at the bottom leaves it on top, and the base Tone under everything.
+    await shaders.reorder(["rclamp-99", BASE_COLOR.instance, FADE.instance], ada);
+    expect(scene.get(id)!.position).toBe(3);
+    expect(scene.get(baseId()!)!.position).toBe(1);
+  });
+
+  it("switched off, stays off: when its shader's gone, it goes back in off", async () => {
+    await bothStarted();
+    const was = fadeId()!;
+    await shaders.setMuted(FADE.instance, true, ada);
+    fade.scene(stack());
+    calls = [];
+    scene.delete(was);
+    instances.forget(was);
+    await settle(80);
+    const now = fadeId()!;
+    expect(calls).toEqual([`create ${now} at 2 muted`]);
+    await settle(80);
+    expect(scene.get(now)!.muted).toBe(true);
+  });
+
+  it("can't have its home moved", async () => {
+    await bothStarted();
+    await expect(shaders.setHome(FADE.instance, [1], ada)).rejects.toMatchObject({ status: 403, message: "Fade's home is every light" });
   });
 });

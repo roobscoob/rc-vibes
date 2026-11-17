@@ -22,7 +22,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Channels } from "../shared/arclamp.ts";
-import { BASE_TONE_NAME, isBaseColor } from "../shared/base-color.ts";
+import { isKept, keptLayer } from "../shared/kept-layers.ts";
 import { keysOf, pathOf, type AddSpec, type Op, type Pool } from "../shared/live.ts";
 import {
   changedParts,
@@ -37,7 +37,7 @@ import {
   type ParamValue,
   type ShaderParams,
 } from "../shared/params.ts";
-import { applyingOf, isBase, shaderOn, type Scene as SavedScene } from "../shared/scenes.ts";
+import { applyingOf, isKeptShader, shaderOn, type Scene as SavedScene } from "../shared/scenes.ts";
 import type { Instance, ShaderKey, ShaderSketch } from "../shared/vibes.ts";
 import { invalidateScene, sendUpdate, UpdateError, type Scene, type SceneShader } from "./scene.ts";
 
@@ -228,15 +228,15 @@ export function selectionSwitch(layer: Layer, ids: readonly number[]): { state: 
 /**
  * A sketch from vibes switched on or off for some lights, as a draft edit:
  * just its mask (off on every light, it's masked off every light; never
- * muted). On for lights outside its home takes them into its home (not the
- * base Tone's, whose home is every light already). One muted from before is
+ * muted). On for lights outside its home takes them into its home (not a
+ * kept layer's, whose home is every light already). One muted from before is
  * off everywhere: on, it's unmuted, on just these.
  */
 export function switchFor(layer: Layer, ids: readonly number[], on: boolean, all: readonly number[]): ShaderPatch {
   const these = [...ids];
   const mask = new Set(layer.mask);
   if (on) {
-    const home = layer.instance && !isBaseColor(layer.key) ? layer.instance.home : null;
+    const home = layer.instance && !isKept(layer.key) ? layer.instance.home : null;
     const outside = home ? these.filter((id) => !home.includes(id)) : [];
     const grown = outside.length > 0 ? { home: sortedIds([...home!, ...outside]) } : {};
     if (layer.muted) {
@@ -382,8 +382,8 @@ function layerOfShader(scene: Scene, shader: SceneShader, d: Draft): Layer {
     key: shader.key,
     stage: shader.stage,
     shader,
-    // The base Tone is a Tone set as the base: called so everywhere.
-    name: isBaseColor(shader.key) ? BASE_TONE_NAME : shader.name,
+    // A kept layer is called as it's kept everywhere: the base Tone, a Tone set as the base.
+    name: keptLayer(shader.key)?.name ?? shader.name,
     sketch: shader.sketch,
     script: shader.script ?? "",
     muted: patch.muted ?? shader.muted,
@@ -416,11 +416,13 @@ export function layersOf(scene: Scene, d: Draft): Layer[] {
   for (const a of [...d.added].reverse()) layers.set(a.key, layerOfAdding(a, d));
   for (const s of scene.shaders) if (!removed.has(s.key)) layers.set(s.key, layerOfShader(scene, s, d));
   // Your order where you set one; anything that turned up since keeps its
-  // place relative to the top.
+  // place relative to the top, under Fade, which stays on top (shared/kept-layers.ts).
   const all = [...layers.keys()];
   const ordered = (d.order ?? all).filter((k) => layers.has(k));
   const missing = all.filter((k) => !ordered.includes(k));
-  return [...missing, ...ordered].map((k) => layers.get(k)!);
+  const order = [...missing, ...ordered];
+  const top = order.filter((k) => keptLayer(k)?.at === "top");
+  return [...top, ...order.filter((k) => !top.includes(k))].map((k) => layers.get(k)!);
 }
 
 /**
@@ -627,7 +629,7 @@ export const drafts = {
   applyScene(scene: SavedScene, live: Scene, all: readonly number[]) {
     const edits = { ...draft.edits };
     for (const s of live.shaders) {
-      if (s.stage === "failed" || isBase(s)) continue;
+      if (s.stage === "failed" || isKeptShader(s)) continue;
       // Its pending on and off gives way (a sketch's mask, any other's mute); its pending knobs too, if it's the scene's sketch.
       const { muted: _muted, mask, params, ...rest } = edits[s.key] ?? {};
       const kept = { ...rest, ...(!s.instance && mask ? { mask } : {}), ...(Object.hasOwn(scene.shaders, s.key) || !params ? {} : { params }) };

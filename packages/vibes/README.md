@@ -267,6 +267,7 @@ them agree, to the frame, where the piece is and which beat it's on.
 
 | | |
 |---|---|
+| `show.on` | whether a show is on (someone started one in vibes) |
 | `show.time` | where the piece is, in seconds |
 | `show.playing` | whether it's running |
 | `show.beat` | beats gone by, counting up smoothly (playing or not); 0 with no tempo |

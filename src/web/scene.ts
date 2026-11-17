@@ -380,6 +380,9 @@ export function useShowClock(): ShowClock {
 /** The show clock as vibes last said it, outside React (the map's simulation). */
 export const showClockNow = () => state.clock;
 
+/** Whether a show is on, as vibes last said it, outside React (the map's simulation). */
+export const showOnNow = () => state.showOn;
+
 /** Something done to the show (starting or ending one, too), at once whatever the mode (it's the room's: never a pending edit). */
 export const sendTransport = (action: TransportAction) => sendUpdate([[pathOf("show", "transport"), action]]);
 

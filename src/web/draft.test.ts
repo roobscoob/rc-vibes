@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FADE } from "../shared/fade.ts";
 import type { Op, Pool } from "../shared/live.ts";
 import type { ParamSpec } from "../shared/params.ts";
 import type { Instance } from "../shared/vibes.ts";
@@ -466,6 +467,15 @@ describe("adding a sketch", () => {
     const [top] = layersOf(live, currentDraft());
     expect(top).toMatchObject({ name: "Rain", mask: [2, 64], script: "", adding: { sketchId: "s2" } });
     expect(reachOf(top!)).toEqual([1]);
+  });
+
+  it("goes under Fade, which stays on top wherever it's put, and is called Fade", () => {
+    const withFade = room(shader(13, { key: FADE.instance, name: "Fade" }), shader(12), shader(11));
+    const added = aurora();
+    drafts.reorder([added, "rclamp-12", "rclamp-11", FADE.instance]);
+    const layers = layersOf(withFade, currentDraft());
+    expect(layers.map((l) => l.key)).toEqual([FADE.instance, added, "rclamp-12", "rclamp-11"]);
+    expect(layers[0]!.name).toBe("Fade");
   });
 
   it("has a pool of its own from the start, and no params until its preview says what it declares", () => {

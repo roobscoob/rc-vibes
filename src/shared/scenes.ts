@@ -13,7 +13,7 @@
 // (show/apply). Which scene is on isn't kept: it's whichever the room looks
 // like (onScene), however it got that way.
 
-import { BASE_COLOR } from "./base-color.ts";
+import { KEPT_LAYERS } from "./kept-layers.ts";
 import type { Pool } from "./live.ts";
 import { sameValue, type ParamValue } from "./params.ts";
 import type { Person, Shader, ShaderKey } from "./vibes.ts";
@@ -65,8 +65,8 @@ export function shaderOn(s: Pick<Shader, "muted" | "mask" | "instance">): boolea
   return s.instance.home.some((id) => !mask.has(id));
 }
 
-/** Whether a shader is Base Color, which scenes leave alone. */
-export const isBase = (s: Pick<Shader, "pool" | "instance">) => s.pool === BASE_COLOR.pool || s.instance?.id === BASE_COLOR.instance;
+/** Whether a shader is a kept layer (the base Tone, Fade), which scenes leave alone. */
+export const isKeptShader = (s: Pick<Shader, "pool" | "instance">) => KEPT_LAYERS.some((l) => s.pool === l.pool || s.instance?.id === l.instance);
 
 /** A knob's change, as a pool takes it: each light's value (null, back to the default). */
 export interface KnobChange {
@@ -93,7 +93,7 @@ export interface Applying {
 export function applyingOf(scene: Scene, shaders: readonly Shader[], pools: Record<string, Pool>): Applying {
   const out: Applying = { on: [], off: [], knobs: [] };
   for (const s of shaders) {
-    if (s.stage === "failed" || isBase(s)) continue;
+    if (s.stage === "failed" || isKeptShader(s)) continue;
     const knobs = scene.shaders[s.key];
     if (!knobs) {
       if (shaderOn(s)) out.off.push(s.key);

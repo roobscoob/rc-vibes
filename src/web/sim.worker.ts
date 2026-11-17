@@ -48,8 +48,8 @@ export type ToWorker =
   | { type: "tick"; seq: number; prev: unknown; now: number; initial: number }
   /** Its params' values, all of them, as vibes' stream sends them. */
   | { type: "params"; values: ParamTable }
-  /** The show clock, as vibes' stream sends it. */
-  | { type: "clock"; clock: ShowClock };
+  /** The show clock, and whether a show is on, as vibes' stream sends them. */
+  | { type: "clock"; clock: ShowClock; on: boolean };
 export type FromWorker =
   /** Loaded, with what it declares as params (as the library has them; none without one). */
   | { type: "loaded"; declared: ParamSpec[] }
@@ -71,7 +71,7 @@ scope.onmessage = (e: MessageEvent<ToWorker>) => {
     return;
   }
   if (m.type === "clock") {
-    (scope.__vibes as VibesHost | undefined)?.apply("clock", { v: 1, clock: m.clock });
+    (scope.__vibes as VibesHost | undefined)?.apply("clock", { v: 1, clock: m.clock, on: m.on });
     return;
   }
   if (m.type === "load") {

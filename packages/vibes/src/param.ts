@@ -102,6 +102,8 @@ interface Kept {
   values: ParamTable;
   /** The show clock, as vibes last said it (show.ts); null till it has. */
   clock: ShowClock | null;
+  /** Whether a show is on, as vibes last said it: false till it has. */
+  showOn: boolean;
   link: Link | null;
   owner: unknown;
   stream: { abort(): void } | null;
@@ -118,10 +120,11 @@ function kept(): Kept {
   const g = globalThis as Record<string, unknown>;
   let k = g[KEPT] as Kept | undefined;
   if (!k || typeof k !== "object" || typeof k.values !== "object" || k.values === null) {
-    g[KEPT] = k = { values: {}, clock: null, link: null, owner: null, stream: null, started: 0, retry: null, retryBy: null, wait: FIRST_WAIT_MS, halted: false };
+    g[KEPT] = k = { values: {}, clock: null, showOn: false, link: null, owner: null, stream: null, started: 0, retry: null, retryBy: null, wait: FIRST_WAIT_MS, halted: false };
   }
   // Kept by an older library: what it didn't keep.
   k.clock ??= null;
+  k.showOn ??= false;
   k.started ??= 0;
   k.retry ??= null;
   k.wait ??= FIRST_WAIT_MS;
@@ -235,9 +238,11 @@ function apply(event: string, data: unknown): boolean {
     return true;
   }
   if (event === "clock") {
-    const clock = showClock((data as Partial<ClockEvent> | null)?.clock);
+    const d = data as Partial<ClockEvent> | null;
+    const clock = showClock(d?.clock);
     if (!clock) return false;
     k.clock = clock;
+    k.showOn = d?.on === true;
     return true;
   }
   return false;
@@ -245,6 +250,9 @@ function apply(event: string, data: unknown): boolean {
 
 /** The show clock as vibes last said it, kept with the sandbox (show.ts); null till it has. */
 export const heardClock = (): ShowClock | null => kept().clock;
+
+/** Whether a show is on, as vibes last said it (show.ts); false till it has. */
+export const heardShowOn = (): boolean => kept().showOn;
 
 // This script: whether its stream is open, and whether it's to open soon.
 const me = {};

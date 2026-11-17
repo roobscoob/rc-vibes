@@ -18,12 +18,14 @@
 // swaps that in once built, the old one running meanwhile. Its home can move.
 // Taking it out, or its shader going some other way, is the end of it.
 //
-// Except for the base Tone (shared/base-color.ts), the one instance vibes puts
-// in itself: its home is every light there is, it's always at the bottom (an
-// instance put in "at the bottom" goes just above it), it can't be moved
-// home, and when its shader's gone it goes back in, as it last was, with its
-// pool kept (keepBase, lost). Taken out, it's gone like any other, and vibes
-// puts a new one in (base-color.ts). No default sketch (a Tone, a Transition:
+// Except for the kept layers (shared/kept-layers.ts: the base Tone and Fade),
+// the instances vibes puts in itself: each one's home is every light there
+// is, it's always at its end of the stack (the base Tone at the bottom, an
+// instance put in "at the bottom" going just above it; Fade on top, one put
+// in "on top" going just under it), it can't be moved home, and when its
+// shader's gone it goes back in, as it last was, with its pool kept (keep,
+// lost). Taken out, it's gone like any other, and vibes puts a new one in
+// (kept-layer.ts). No default sketch (a Tone, a Transition:
 // shared/default-sketches.ts) is updated: its code is vibes'.
 
 import { zValidator } from "@hono/zod-validator";
@@ -31,8 +33,8 @@ import { Hono, type Context } from "hono";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ShaderDescriptor } from "../shared/arclamp.ts";
-import { BASE_COLOR, isBaseColor } from "../shared/base-color.ts";
 import { isDefaultSketch } from "../shared/default-sketches.ts";
+import { isKept, KEPT_LAYERS, keptLayer, type KeptLayer } from "../shared/kept-layers.ts";
 import type { Instance, Me, Person } from "../shared/vibes.ts";
 import type { Arclamp } from "./arclamp.ts";
 import type { AuthEnv } from "./auth.ts";
@@ -68,7 +70,7 @@ export interface InstanceDeps {
   pools?: Pick<Pools, "adopt" | "remove"> | null;
   /** Told when an instance is gone, with its pool, to end its shader's stream of params (params.ts). */
   gone?: (pool: string) => void;
-  /** Told when the base Tone has gone in anew, held muted until its params reach it (base-color.ts). */
+  /** Told when a kept layer has gone in anew, held muted until its params reach it (kept-layer.ts). */
   wentIn?: (id: string, d: ShaderDescriptor) => void;
 }
 
@@ -104,8 +106,8 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
     return (await lightIds()).filter((id) => !inside.has(id));
   }
 
-  /** Every light outside an instance's home: none for the base Tone, whose home is every light there is, however many that comes to be. */
-  const outsideOf = (inst: InstanceRow) => (isBaseColor(inst.id) ? Promise.resolve([]) : outside(inst.home));
+  /** Every light outside an instance's home: none for a kept layer, whose home is every light there is, however many that comes to be. */
+  const outsideOf = (inst: InstanceRow) => (isKept(inst.id) ? Promise.resolve([]) : outside(inst.home));
 
   /** An instance gone: its shader's stream of params ended, and its pool let go. */
   const letGo = (inst: InstanceRow) => {
@@ -114,12 +116,12 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
   };
 
   /**
-   * An instance whose shader's gone: forgotten, its pool with it. The base Tone
+   * An instance whose shader's gone: forgotten, its pool with it. A kept layer
    * isn't: it goes back in as it last was (its row has what was wanted of it
    * last), its pool and values kept; only its old stream ends.
    */
   function lost(inst: InstanceRow) {
-    if (isBaseColor(inst.id)) {
+    if (isKept(inst.id)) {
       gone(inst.pool_id);
       db.updateInstance(inst.id, { shader_id: null, state: "building", error: null });
       changed();
@@ -147,34 +149,37 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
     return { muted: inst.muted, mask: inst.mask ?? (await outsideOf(inst)) };
   }
 
-  /** The bottom of the stack, for everything but Base Tone: just above it, wherever it is now (1 if it isn't in). */
-  function bottom(scene: ShaderDescriptor[]): number {
-    const base = db.instance(BASE_COLOR.instance);
-    const d = base?.shader_id != null ? scene.find((s) => s.id === base.shader_id && s.type === "js") : undefined;
-    return d ? d.position + 1 : 1;
+  /** The kept layer at an end of the stack, as it is in the scene now, if it's in. */
+  function keptAt(at: KeptLayer["at"], scene: ShaderDescriptor[]) {
+    const inst = db.instance(KEPT_LAYERS.find((l) => l.at === at)!.instance);
+    return inst?.shader_id != null ? scene.find((s) => s.id === inst.shader_id && s.type === "js") : undefined;
   }
 
   /**
    * Where a shader goes in, just above the one with the key `above` ("" the
-   * bottom, above the base Tone; the base Tone itself, under everything): arclamp's
-   * position for it; undefined for the top, as when that shader's gone. One
-   * that isn't in yet stands for wherever it's to go.
+   * bottom, above the base Tone; null the top, under Fade; a kept layer
+   * itself, at its end): arclamp's position for it; undefined for the very
+   * top. One that isn't in yet stands for wherever it's to go.
    */
   function positionOf(id: string, above: string | null, scene: ShaderDescriptor[]): number | undefined {
-    if (isBaseColor(id)) return 1;
+    const kept = keptLayer(id);
+    if (kept) return kept.at === "bottom" ? 1 : undefined;
+    // Nothing goes over Fade: at its place, it's under it.
+    const top = keptAt("top", scene)?.position;
+    const under = (p: number | undefined) => (top === undefined ? p : Math.min(p ?? top, top));
     const seen = new Set<string>();
     for (let key = above; key !== null && !seen.has(key); ) {
-      if (key === "") return bottom(scene);
+      if (key === "") return under((keptAt("bottom", scene)?.position ?? 0) + 1);
       seen.add(key);
       const it = shaderOfKey(db, key);
-      if (!it) return undefined;
+      if (!it) return under(undefined);
       if (it.arclampId !== null) {
         const d = scene.find((s) => s.id === it.arclampId && s.type === "js");
-        return d && d.position + 1;
+        return under(d && d.position + 1);
       }
       key = it.instance?.above ?? null;
     }
-    return undefined;
+    return under(undefined);
   }
 
   /**
@@ -220,10 +225,10 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
         const read = s.type === "js" && s.script !== undefined ? readStamp(s.script, config.signingKey) : null;
         return read?.verified && read.stamp.shader === id;
       });
-      // The base Tone going in anew goes in muted, until its params have reached
-      // it (held: base-color.ts lets it go): else it would light the room in
+      // A kept layer going in anew goes in muted, until its params have reached
+      // it (held: kept-layer.ts lets it go): else it would light the room in
       // its defaults until then.
-      const held = !found && isBaseColor(id);
+      const held = !found && isKept(id);
       const want = async () => ({ ...(await wanted(id)), ...(held ? { muted: true } : {}) });
       // Muted and masked as it goes in, so its first frame lights only what
       // it may: arclamp's shaders render as soon as they're in.
@@ -395,7 +400,8 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
     async setHome(id: string, homeLights: number[], user: Me): Promise<{ instance: Instance } | Refusal> {
       const inst = db.instance(id);
       if (!inst) return refusal("no such instance", 404, "not_found");
-      if (isBaseColor(id)) return refusal("Base Tone's home is every light", 403, "base_color");
+      const kept = keptLayer(id);
+      if (kept) return refusal(`${kept.name}'s home is every light`, 403, "base_color");
       const bad = await badHome(homeLights);
       if (bad) return refusal(bad, 400, "bad_home");
       const next = sorted(homeLights);
@@ -437,13 +443,13 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
 
     /**
      * An instance out of the room: its shader removed, if it's there, and it
-     * forgotten. The base Tone too: its shader let go of first, so its going
+     * forgotten. A kept layer too: its shader let go of first, so its going
      * isn't taken for it lost (and put back meanwhile); vibes puts a new one in.
      */
     async remove(id: string, user: Person): Promise<boolean> {
       const inst = db.instance(id);
       if (!inst) return false;
-      if (isBaseColor(id) && inst.shader_id !== null) db.updateInstance(id, { shader_id: null });
+      if (isKept(id) && inst.shader_id !== null) db.updateInstance(id, { shader_id: null });
       if (inst.shader_id !== null) {
         try {
           await arclamp.deleteShader(inst.shader_id);
@@ -465,25 +471,26 @@ export function createInstances({ config, db, arclamp, builds, lightIds, changed
       return inst ? sorted([...mask, ...(await outsideOf(inst))]) : mask;
     },
 
-    /** A shader's gone (removed through vibes or not): so is its instance (the base Tone goes back in). */
+    /** A shader's gone (removed through vibes or not): so is its instance (a kept layer goes back in). */
     forget(shaderId: number) {
       const inst = db.instanceOfShader(shaderId);
       if (inst) lost(inst);
     },
 
     /**
-     * The base Tone (shared/base-color.ts) in the room, on this build: made, if
-     * it hasn't been, on every light and at the bottom, its pool its own;
+     * A kept layer (shared/kept-layers.ts) in the room, on this build: made, if
+     * it hasn't been, on every light and at its end, its pool its own;
      * moved on to this build, if it's on another (a vibes with other code for
      * it); put in, if it isn't, or tried again, if it couldn't go in. Made
      * just now, its pool's first values are `seed`'s to set, before it goes in.
      */
-    async keepBase(buildId: string, by: Person, seed: () => Promise<void> = async () => {}): Promise<void> {
-      const id = BASE_COLOR.instance;
+    async keep(layer: KeptLayer, buildId: string, by: Person, seed: () => Promise<void> = async () => {}): Promise<void> {
+      const id = layer.instance;
       const inst = db.instance(id);
       if (!inst) {
-        db.addInstance({ id, sketch_id: BASE_COLOR.sketch, build_id: buildId, home: await lightIds(), by_id: by.id, by_name: by.name, at: Date.now(), muted: false, mask: [], above: "", pool_id: BASE_COLOR.pool });
-        pools?.adopt(BASE_COLOR.pool, `instance:${id}`);
+        const above = layer.at === "bottom" ? "" : null;
+        db.addInstance({ id, sketch_id: layer.sketch, build_id: buildId, home: await lightIds(), by_id: by.id, by_name: by.name, at: Date.now(), muted: false, mask: [], above, pool_id: layer.pool });
+        pools?.adopt(layer.pool, `instance:${id}`);
         await seed();
         changed();
       } else if (inst.build_id !== buildId) {

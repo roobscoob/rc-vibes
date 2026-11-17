@@ -12,8 +12,11 @@
 //               back and forth or over again
 //   Rainbow     a rainbow rolling across the room, in bands or a rose of
 //               petals round its center
+//   Fade        each color light eased toward what's below it (the room's
+//               Fade, on top of every layer, is one: shared/fade.ts)
 
 import { BASE_COLOR } from "./base-color.ts";
+import { FADE } from "./fade.ts";
 
 export interface DefaultSketch {
   id: string;
@@ -28,6 +31,7 @@ export const DEFAULT_SKETCHES: readonly DefaultSketch[] = [
   { id: BASE_COLOR.sketch, name: BASE_COLOR.name, about: "Set the color, brightness, and fidelity.", entry: "tone" },
   { id: "b45e0c01-0000-4000-8000-000000000004", name: "Transition", about: "Move between the previous color and a target color.", entry: "transition" },
   { id: "b45e0c01-0000-4000-8000-000000000005", name: "Rainbow", about: "Rotate the hue over time.", entry: "rainbow" },
+  { id: FADE.sketch, name: FADE.name, about: "Ease each light into its next color.", entry: "fade" },
 ];
 
 /** A default sketch, by its id. */
