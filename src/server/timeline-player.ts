@@ -28,7 +28,7 @@
 import { randomUUID } from "node:crypto";
 import type { LiveTree } from "../shared/live.ts";
 import { sameValue, type ChangeEvent, type ParamValue } from "../shared/params.ts";
-import { isBase, shaderOn, type Scene } from "../shared/scenes.ts";
+import { isKeptShader, shaderOn, type Scene } from "../shared/scenes.ts";
 import type { ShowClock } from "../shared/show.ts";
 import { edgesOf, endOf, msAt, onAt, posAt, type Playhead, type Timeline } from "../shared/show-timeline.ts";
 import type { Me, Shader, ShaderKey } from "../shared/vibes.ts";
@@ -107,7 +107,7 @@ export function createTimelinePlayer({ show, timeline, scenes, room, shaders, ar
 
   /** The shaders the timeline turns on and off: all but Base Color, and any that failed. */
   const playable = (tree: Pick<LiveTree, "shaders" | "stack">): Shader[] =>
-    tree.stack.flatMap((k) => (tree.shaders[k] ? [tree.shaders[k]] : [])).filter((s) => s.stage !== "failed" && !isBase(s));
+    tree.stack.flatMap((k) => (tree.shaders[k] ? [tree.shaders[k]] : [])).filter((s) => s.stage !== "failed" && !isKeptShader(s));
 
   /** A shader's param as the timeline has it with `scene`'s knobs on it (none: off): the scene's, if it sets that param; else as it began. */
   function valuesOf(r: Run, list: Record<string, Scene>, s: Shader, scene: string | undefined, param: string): Values {

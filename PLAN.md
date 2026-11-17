@@ -218,6 +218,23 @@ lights where they are, as free lights. vibes keeps its rail changes in the
      (the server would let it be taken out); muting and masks work as for
      any shader, and its params are open under its row in the selection to
      start with.
+   - **Fade** (`src/shared/fade.ts`). Each color light eased toward what
+     the layers below make, so nothing changes a light at once: a layer
+     switched on or off, a scene, a param, a sketch's own jumps. A light
+     closes in by the same share of the way each moment (the same at any
+     tick rate, never past its target), colors as `Color.mix` moves them
+     (OKLab, brightness by its cube root), all but 1% of the way after its
+     Fade time (1 s by default, each light's own; 0 is at once). While a
+     show is on it passes changes through at once (`show.on`), so flashes
+     on the beat stay sharp. Old bulbs are left as they are. Fade is a
+     default sketch (`src/default-sketches/fade.ts`), and one Fade is the
+     room's, kept on top as the base Tone is at the bottom
+     (`src/shared/kept-layers.ts`, `server/kept-layer.ts`): put in on every
+     light, moved back to the top when anything goes over it (one put in
+     "on top" goes just under it), put back when it's gone, its home fixed,
+     and left alone by scenes and the show. Its switch in the layers panel
+     turns it off on the selected lights or all of them (masked off them, as
+     any sketch is), and there the lights are as the layers below make them.
    - **Default sketches** (`src/shared/default-sketches.ts`). vibes' own
      sketches, in a section of their own at the top of the library: Tone,
      and Transition (each color light from the light below it to an End tone,
@@ -226,8 +243,9 @@ lights where they are, as free lights. vibes keeps its rail changes in the
      Zoom, Speed, and Petals to bend its bands into a rose round the room's
      center; each light keeps the brightness and fidelity of the light below
      it, its hue turning, and as much of the light below's saturation as the
-     bulbs make of each hue at that brightness). Each is built with vibes
-     (`src/default-sketches/<entry>.ts`, to `dist/default-sketches/`) and
+     bulbs make of each hue at that brightness), and Fade (above). Each is
+     built with vibes (`src/default-sketches/<entry>.ts`, to
+     `dist/default-sketches/`) and
      made as vibes starts (`server/default-sketches.ts`), one build each; the
      sketches API answers a build of one with it, and there's no code of one
      to open, fork, publish, update or delete.

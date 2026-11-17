@@ -26,7 +26,7 @@
 
 import { z } from "zod";
 import type { Channels } from "../shared/arclamp.ts";
-import { isBaseColor } from "../shared/base-color.ts";
+import { keptLayer } from "../shared/kept-layers.ts";
 import { keysOf, POOL_ID, type AddSpec, type Op, type RoomMessage } from "../shared/live.ts";
 import { COLOR_PARTS, PARAM_NAME, type ColorPart, type ParamSpec, type ParamValue } from "../shared/params.ts";
 import { RAIL_ID, type RailShape } from "../shared/rails.ts";
@@ -580,10 +580,10 @@ export function createUpdates({ shaders, instances, pools, layout, setRoomtone, 
           for (const pool of batch.declared.keys()) {
             if (!taking.has(pool) && !pools.mayDeclare(pool, owner)) return refuse("what a pool declares is for the code running with it to say");
           }
-          // The base Tone is on every light: moving its home refuses all of it.
-          const base = (key: string) => isBaseColor(shaders.keyOf(key, user));
+          // A kept layer is on every light: moving its home refuses all of it.
           for (const [key, s] of batch.shaders) {
-            if (s.home && base(key)) return say({ type: "refused", id, error: "Base Tone's home is every light", code: "base_color", made: {} });
+            const kept = s.home && keptLayer(shaders.keyOf(key, user));
+            if (kept) return say({ type: "refused", id, error: `${kept.name}'s home is every light`, code: "base_color", made: {} });
           }
           waiting.push({ id, batch });
           void makeWaiting();

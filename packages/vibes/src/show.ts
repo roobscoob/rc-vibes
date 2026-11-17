@@ -23,11 +23,13 @@
 // run elsewhere), it rests too, the piece starting with the sketch.
 
 import { field, type Field } from "./field.ts";
-import { heardClock } from "./param.ts";
+import { heardClock, heardShowOn } from "./param.ts";
 import { beatClock, type Clock } from "./signal.ts";
 import { BEATS_PER_BAR, beatAt, RESTING_BPM, timeAt } from "./wire.ts";
 
 export interface Show {
+  /** Whether a show is on in the room (someone started one); false with none, or till vibes has said. */
+  readonly on: Field<boolean>;
   /** Where the piece is, in seconds. */
   readonly time: Field<number>;
   /** Whether the piece is running. */
@@ -53,6 +55,7 @@ const bpmNow = () => {
 };
 
 export const show: Show = {
+  on: field(() => heardShowOn()),
   time: field(({ now, t }) => {
     const c = heardClock();
     return c ? timeAt(c, now) : t;

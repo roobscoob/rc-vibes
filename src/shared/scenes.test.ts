@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BASE_COLOR } from "./base-color.ts";
+import { FADE } from "./fade.ts";
 import type { Pool } from "./live.ts";
 import type { ParamSpec } from "./params.ts";
 import { applyingOf, knobsOf, onScene, shaderOn, type Scene, type Scenes } from "./scenes.ts";
@@ -45,6 +46,11 @@ describe("applying a scene", () => {
       { key: "a", pool: "pa", param: "speed", set: [["2", null], ["1", 5]] },
       { key: "a", pool: "pa", param: "hue", set: [["3", 0.5]] },
     ]);
+  });
+
+  it("leaves Fade alone, as it does Base Tone", () => {
+    const room = [shader("a", { muted: true, pool: "pa" }), shader("fade", { pool: FADE.pool }), shader("held", { instance: { id: FADE.instance, home: [1] } as Shader["instance"] })];
+    expect(applyingOf(scene({ a: {} }), room, { pa: pool({}) })).toEqual({ on: ["a"], off: [], knobs: [] });
   });
 
   it("leaves knobs its sketch no longer declares, and passes over a sketch gone from the room", () => {

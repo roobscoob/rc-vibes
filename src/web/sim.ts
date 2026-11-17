@@ -23,7 +23,7 @@ import type { ShowClock } from "../shared/show.ts";
 import { drafts, type Layer, type LayerKey } from "./draft.ts";
 import { pushSimFrame, setSimulated } from "./live.ts";
 import { rNow } from "./rtime.ts";
-import { showClockNow } from "./scene.ts";
+import { showClockNow, showOnNow } from "./scene.ts";
 import type { FromWorker, ToWorker } from "./sim.worker.ts";
 
 const TICK_MS = 33;
@@ -176,11 +176,11 @@ class ShaderWorker {
     });
   }
 
-  /** The show clock, when it's changed since last sent. */
-  sendClock(clock: ShowClock) {
+  /** The show clock (and whether a show is on, which only changes with it), when it's changed since last sent. */
+  sendClock(clock: ShowClock, on: boolean) {
     if (clock === this.sentClock) return;
     this.sentClock = clock;
-    this.worker.postMessage({ type: "clock", clock } satisfies ToWorker);
+    this.worker.postMessage({ type: "clock", clock, on } satisfies ToWorker);
   }
 
   /** Its params' values, all of them, when they've changed since last sent. */
@@ -340,6 +340,7 @@ class Simulation {
     const started = performance.now();
     const now = rNow();
     const clock = showClockNow();
+    const showOn = showOnNow();
     const { lights, layers, template, peekAbove = 0 } = this.inputs;
     const run = await runPipeline(
       lights,
@@ -349,7 +350,7 @@ class Simulation {
       async (layer, state) => {
         const w = this.workers.get(layer.key);
         if (!w || w.stopped) return null;
-        w.sendClock(clock);
+        w.sendClock(clock, showOn);
         return w.call(prevOf(state, lights, now), now, now);
       },
       () => this.running,

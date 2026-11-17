@@ -28,8 +28,8 @@ interface Deps {
   publish: (ops: Op[]) => void;
   /** arclamp's time now (rclamp-time.ts). */
   rNow: () => number;
-  /** Told the clock each time it changes: for every sketch's stream. */
-  onClock?: (clock: ShowClock) => void;
+  /** Told the clock each time it changes, and whether a show is on: for every sketch's stream. */
+  onClock?: (clock: ShowClock, on: boolean) => void;
   /** Told each time the show's clock or playhead changes: for the timeline playing (timeline-player.ts). */
   onChange?: () => void;
 }
@@ -99,7 +99,7 @@ export function createShow({ db, publish, rNow, onClock = () => {}, onChange = (
       show = { ...show, on, clock, playhead };
       save();
       publish([...(a.do === "start" || a.do === "end" ? [["show/on", on] as Op] : []), ["show/clock", clock], ["show/playhead", playhead]]);
-      onClock(show.clock);
+      onClock(show.clock, show.on);
       onChange();
       const detail: Record<string, unknown> = { do: a.do };
       if (a.do === "tempo") detail.bpm = a.bpm;

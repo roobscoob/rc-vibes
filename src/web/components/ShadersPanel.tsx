@@ -51,6 +51,7 @@ import { domainWords } from "../domain-words.ts";
 import { ChevronUpIcon, CodeIcon, PlusIcon } from "../icons.tsx";
 import { useLights, useScene, type Scene } from "../scene.ts";
 import { isBaseColor } from "../../shared/base-color.ts";
+import { isKept } from "../../shared/kept-layers.ts";
 import { defaultSketch } from "../../shared/default-sketches.ts";
 import { AddSketch } from "./AddSketch.tsx";
 import { reorderAnnouncements, reorderInstructions } from "./layer-announcements.ts";
@@ -129,9 +130,9 @@ export function ShadersPanel({ here, selected, onSelect }: Props) {
       keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] },
     }),
   );
-  // The base Tone stays at the bottom (shared/base-color.ts): it's no place among them to move to.
+  // The kept layers stay at their ends (shared/kept-layers.ts): they're no place among them to move to.
   // One going is moved like any other: where it's dropped is where Restore puts it back.
-  const listed = shown.filter((l) => changeable(l) && !isBaseColor(l.key)).map((l) => l.key);
+  const listed = shown.filter((l) => changeable(l) && !isKept(l.key)).map((l) => l.key);
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
     const moved = arrayMove(listed, listed.indexOf(String(active.id)), listed.indexOf(String(over.id)));
@@ -457,8 +458,8 @@ function Sections({ layer, on, scene, all }: { layer: Layer; on: number[]; scene
 export function sketchSectionOf(layer: Layer, scene: Scene, all: readonly LightInfo[]): ReactNode | null {
   const ids = all.map((l) => l.id);
   const coming = (layer.stage === "building" || layer.stage === "failed") && layer.instance;
-  // One of vibes' own (shared/default-sketches.ts: a Tone, a Transition): its code's vibes', so nothing to open or update, just clone or take out.
-  const base = isBaseColor(layer.key);
+  // One of vibes' own (shared/default-sketches.ts: a Tone, a Transition): its code's vibes', so nothing to open or update, just clone or take out (a kept layer, neither).
+  const kept = isKept(layer.key);
   const builtIn = defaultSketch(layer.adding?.sketchId ?? layer.instance?.sketchId ?? layer.sketch?.id);
   const isSketch = !builtIn && (layer.sketch !== null || layer.adding !== null || coming);
   const outside = !isSketch && !builtIn && !layer.instance;
@@ -472,7 +473,7 @@ export function sketchSectionOf(layer: Layer, scene: Scene, all: readonly LightI
     );
   }
   if (builtIn) {
-    if (base) return null;
+    if (kept) return null;
     return (
       <SidebarSection title="Sketch">
         <div className="shader-actions">

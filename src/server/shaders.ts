@@ -14,7 +14,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { ShaderDescriptor } from "../shared/arclamp.ts";
-import { BASE_COLOR, isBaseColor } from "../shared/base-color.ts";
+import { BASE_LAYER, isKept, keptLayer } from "../shared/kept-layers.ts";
 import { cleanValue, PARAM_NAME, type Changes } from "../shared/params.ts";
 import type { Me, Person } from "../shared/vibes.ts";
 import type { Arclamp, Schedule } from "./arclamp.ts";
@@ -233,7 +233,8 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
       const it = resolve(key, user);
       if (!it) throw new Refused(404, "not_found", "no such shader");
       if (!it.instance || !instances) throw new Refused(400, "no_home", "it wasn't put in from a sketch, so it has no home");
-      if (isBaseColor(it.instance.id)) throw new Refused(403, "base_color", "Base Tone's home is every light");
+      const kept = keptLayer(it.instance.id);
+      if (kept) throw new Refused(403, "base_color", `${kept.name}'s home is every light`);
       const moved = await instances.setHome(it.instance.id, home, user);
       if ("refused" in moved) throw new Refused(moved.status, moved.code, moved.refused);
     },
@@ -242,12 +243,13 @@ export function createShaders({ config, arclamp, db, instances, pools = null }: 
      * The stack in this order, top first. Those in the room are moved; each
      * not in yet is to go in just above the one under it here (or at the
      * bottom); gone ones are passed over. Any in the room it leaves out stay
-     * on top (put in since whoever asked last looked). The base Tone stays at
-     * the bottom, wherever the order puts it, or if it leaves it out.
+     * on top (put in since whoever asked last looked). The kept layers stay at
+     * their ends, wherever the order puts them, or if it leaves them out: the
+     * base Tone the bottom, and Fade the top, left out as it always is.
      */
     async reorder(order: string[], user: Person) {
-      const base = db.instance(BASE_COLOR.instance);
-      const shaders = order.map((key) => resolve(key, user)).filter((it) => !isBaseColor(it?.instance?.id));
+      const base = db.instance(BASE_LAYER.instance);
+      const shaders = order.map((key) => resolve(key, user)).filter((it) => !isKept(it?.instance?.id));
       shaders.forEach((it, i) => {
         if (!it?.instance || it.arclampId !== null) return;
         const under = shaders.slice(i + 1).find((s) => s !== null);

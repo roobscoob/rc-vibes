@@ -8,7 +8,6 @@ import { WebSocketServer } from "ws";
 import { apiRoutes, createLights, handleError } from "./api.ts";
 import { createArclamp } from "./arclamp.ts";
 import { authRoutes } from "./auth.ts";
-import { createBaseColor, type BaseColor } from "./base-color.ts";
 import { loadDefaultSketchScript } from "./base-color-script.ts";
 import { createDefaultSketches, type DefaultSketches } from "./default-sketches.ts";
 import { dockerRunner } from "./box-docker.ts";
@@ -21,6 +20,8 @@ import { loadConfig } from "./env.ts";
 import { followEvents } from "./event-stream.ts";
 import { createHealthWatch } from "./health.ts";
 import { createInstances, type Instances } from "./instances.ts";
+import { createKeptLayer, type KeptLayerKeeper } from "./kept-layer.ts";
+import { KEPT_LAYERS } from "../shared/kept-layers.ts";
 import { createLayout } from "./layout.ts";
 import { createLiveState } from "./live.ts";
 import { createParamLinks } from "./params.ts";
@@ -85,7 +86,7 @@ rtime.start();
 // The timeline playing (timeline-player.ts, made with the shaders in api.ts)
 // is told at once of every change it plays by: the show's, a block's.
 const playing: PlayingRef = { changed: () => {} };
-const show = createShow({ db, publish: live.publish, rNow: rtime.rNow, onClock: (clock) => params?.tellClock(clock), onChange: () => playing.changed() });
+const show = createShow({ db, publish: live.publish, rNow: rtime.rNow, onClock: (clock, on) => params?.tellClock(clock, on), onChange: () => playing.changed() });
 live.replace([["show", show.tree()]]);
 // The room's scenes (scenes.ts), and the show's timeline of them (show-timeline.ts): told to every page (the tree).
 const scenes = createScenes({ db, publish: live.publish, room: () => live.tree() });
@@ -95,9 +96,10 @@ live.replace([["timeline", showTimeline.tree()]]);
 
 // The scene, followed as it changes, its footprints from the light stream;
 // arclamp's health, likewise; and sketches put in the room (instances),
-// The base Tone always among them, at the bottom (base-color.ts).
+// The kept layers always among them, the base Tone at the bottom and Fade on
+// top (kept-layer.ts).
 let instances: Instances | null = null;
-let baseColor: BaseColor | null = null;
+let kept: KeptLayerKeeper[] = [];
 // vibes' own sketches in the library (default-sketches.ts): their builds, made as vibes starts.
 let defaults: DefaultSketches | null = null;
 // Pools' streams: each shader linked once (an eval), then a stream from it,
@@ -107,7 +109,7 @@ let defaults: DefaultSketches | null = null;
 const timeline = createTimeline({ arclamp, rNow: rtime.rNow });
 const params =
   builds && config.shaderUrl
-    ? createParamLinks({ pools, arclamp, secret: config.sessionSecret, url: `${config.shaderUrl}/shader-api/params`, showClock: show.clock, timeline })
+    ? createParamLinks({ pools, arclamp, secret: config.sessionSecret, url: `${config.shaderUrl}/shader-api/params`, showClock: show.clock, showOn: () => show.tree().on, timeline })
     : null;
 const feed = createSceneFeed({
   config,
@@ -117,7 +119,7 @@ const feed = createSceneFeed({
   layout: () => lights.arclampLights(),
   instances: () => instances,
   onShaders: (shaders) => params?.scene(shaders),
-  onScene: (shaders) => baseColor?.scene(shaders),
+  onScene: (shaders) => kept.forEach((k) => k.scene(shaders)),
   rNow: rtime.rNow,
 });
 feed.subscribe((scene) => live.scene(scene));
@@ -136,20 +138,17 @@ if (builds) {
     changed: () => feed.poke(),
     pools,
     gone: (pool) => params?.gone(pool),
-    wentIn: (id, d) => baseColor?.wentIn(id, d),
+    wentIn: (id, d) => kept.forEach((k) => k.wentIn(id, d)),
   });
   if (config.signingKey) {
     defaults = createDefaultSketches({ signingKey: config.signingKey, db, script: (s) => loadDefaultSketchScript(s, config.production) });
-    baseColor = createBaseColor({
-      db,
-      defaults,
-      instances,
-      pools,
-      arclamp: noted,
-      linked: params ? (pool) => params.linked(pool) : null,
-    });
+    const deps = { db, defaults, instances, pools, arclamp: noted, linked: params ? (pool: string) => params.linked(pool) : null };
+    kept = KEPT_LAYERS.map((layer) => createKeptLayer(layer, deps));
     const made = defaults;
-    void made.start().then(() => baseColor?.start());
+    // One at a time: the base Tone in first, at the bottom.
+    void made.start().then(async () => {
+      for (const k of kept) await k.start();
+    });
   }
 }
 

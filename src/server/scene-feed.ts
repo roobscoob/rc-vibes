@@ -37,7 +37,7 @@ import type { Db, InstanceRow } from "./db.ts";
 import type { Config } from "./env.ts";
 import type { EventHandlers, Following } from "./event-stream.ts";
 import type { Instances } from "./instances.ts";
-import type { SceneShader } from "./base-color.ts";
+import type { SceneShader } from "./kept-layer.ts";
 import type { SeenShader } from "./params.ts";
 import { rclampKey, shaderOfKey } from "./shaders.ts";
 import { readStamp, sketchOf } from "./stamp.ts";
@@ -68,7 +68,7 @@ export interface FeedDeps {
   instances?: () => Instances | null;
   /** Told the shaders in the scene that are instances' (by their stamps), each time it's made: for linking them for params (params.ts). */
   onShaders?: (shaders: SeenShader[]) => void;
-  /** Told every shader in the scene (not the room tone), each time it's made: for keeping the base Tone (base-color.ts). */
+  /** Told every shader in the scene (not the room tone), each time it's made: for keeping the kept layers (kept-layer.ts). */
   onScene?: (shaders: SceneShader[]) => void;
   confirmMs?: number;
   /** arclamp's time now (rclamp-time.ts): when a change put off for a frame is shown. */
