@@ -35,7 +35,10 @@ export const BASE_COLOR_PARAMS = {
   on: { name: "on", default: false, options: { label: "Old bulbs", lights: "switch" as const } },
 };
 
-const specOf = (raw: unknown): ParamSpec => {
+/** Seconds a Tone's color light takes to get all but 1% of the way to a new color (shared/fade.ts). */
+export const TONE_FADE_S = 1;
+
+const specOf =(raw: unknown): ParamSpec => {
   const spec = checkSpec(raw);
   if (typeof spec === "string") throw new Error(spec);
   return spec;
